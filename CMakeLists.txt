@@ -5,4 +5,5 @@ set(CMAKE_CXX_STANDARD 17)
 include(cmake/helper.cmake)
 
 create_executable(pogo    src/pogo_sandbox.cpp)
+create_executable(pogo1D  src/pogo_1D.cpp)
 

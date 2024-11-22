@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<robot name="pogo">
+<robot name="pogo_test">
+    <link name="world"></link>
+    <link name="base"></link>
+    <joint name="base_world" type="fixed">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <parent link="world" />
+        <child link="base" />
+        <axis xyz="0 0 0" />
+    </joint>
+
     <link name="base_pogo">
         <inertial>
             <origin xyz="-0.00041349 0 0.11352" rpy="0 0 0" />
@@ -16,6 +25,14 @@
             </material>
         </visual>
     </link>
+    <joint name="base_base_pogo" type="prismatic">
+        <origin xyz="0 0 0" rpy="0 0 0" />
+        <parent link="base" />
+        <child link="base_pogo" />
+        <axis xyz="0 0 1" />
+        <limit lower="0"/>
+    </joint>
+
     <link name="tip">
         <inertial>
             <origin xyz="0.0015564 0 -0.2941" rpy="0 0 0" />
@@ -73,12 +90,14 @@
             </material>
         </visual>
     </link>
-    <joint name="base_cross" type="revolute">
+    <!-- <joint name="base_cross" type="revolute"> -->
+    <joint name="base_cross" type="fixed">
         <origin xyz="0 0 0.04" rpy="0 0 0" />
         <parent link="base_pogo" />
         <child link="cross" />
-        <axis xyz="0 1 0" />
-        <limit lower="-1.0472" upper="1.0472" effort="700"/>
+        <!-- <axis xyz="0 1 0" />
+        <limit lower="-1.0472" upper="1.0472" effort="700"/> -->
+        <axis xyz="0 0 0" />
     </joint>
     <link name="guide">
         <inertial>
@@ -96,12 +115,14 @@
             </material>
         </visual>
     </link>
-    <joint name="cross_guide" type="revolute">
+    <!-- <joint name="cross_guide" type="revolute"> -->
+    <joint name="cross_guide" type="fixed">
         <origin xyz="0 0 0" rpy="0 0 0" />
         <parent link="cross" />
         <child link="guide" />
-        <axis xyz="1 0 0" />
-        <limit lower="-1.0472" upper="1.0472" effort="700"/>
+        <!-- <axis xyz="1 0 0" />
+        <limit lower="-1.0472" upper="1.0472" effort="700"/> -->
+        <axis xyz="0 0 0"/>
     </joint>
     <link name="mass">
         <inertial>
