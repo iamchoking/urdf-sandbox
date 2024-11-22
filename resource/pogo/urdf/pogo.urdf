@@ -31,6 +31,12 @@
                 <color rgba="0.82 0.576 0.063 1" />
             </material>
         </visual>
+        <collision>
+            <origin xyz="0 0 -0.5" rpy="0 0 0" />
+            <geometry>
+                <sphere radius="0.05"/>
+            </geometry>
+        </collision>
     </link>
     <joint name="base_tip" type="prismatic">
         <origin xyz="0 0 0" rpy="0 0 0" />
@@ -39,40 +45,18 @@
         <axis xyz="0 0 1" />
         <limit lower="0" upper="0.45"/>
     </joint>
+
+    <!-- link for kinematics only -->
     <link name="foot"> 
-    <!-- link for collision body only -->
-        <inertial>
-            <origin xyz="0 0 0" rpy="0 0 0" />
-            <mass value="0" />
-            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0" />
-        </inertial>
-        <!-- <visual>
-            <origin
-                xyz="0 0 0"
-                rpy="0 0 0" />
-            <geometry>
-                <mesh
-                    filename="package://pogo_test/meshes/foot.STL" />
-            </geometry>
-            <material
-                name="">
-                <color
-                    rgba="0.843137254901961 0.843137254901961 0.843137254901961 0.1" />
-            </material>
-        </visual> -->
-        <collision>
-            <origin xyz="0 0 0" rpy="0 0 0" />
-            <geometry>
-                <sphere radius="0.05"/>
-            </geometry>
-        </collision>
     </link>
+
     <joint name="tip_foot_fixed" type="fixed">
         <origin xyz="0 0 -0.5" rpy="0 0 0" />
         <parent link="tip" />
         <child link="foot" />
         <axis xyz="0 0 0" />
     </joint>
+
     <link name="cross">
         <inertial>
             <origin xyz="0 0 0" rpy="0 0 0" />
@@ -147,6 +131,23 @@
         <child link="mass" />
         <axis xyz="0 0 1" />
         <limit lower="0" upper="0.4" effort="3000"/>
+    </joint>
+    <!-- link for kinematics only (and visual touch) -->
+    <link name="head">
+        <visual>
+            <origin xyz="0 0 0" rpy="0 0 0" />
+            <geometry>
+                <sphere radius="0.15" />
+            </geometry>
+            <material name="">
+                <color rgba="1 0 0 1" />
+            </material>
+        </visual>
+    </link>
+    <joint name="mass_head" type="fixed">
+        <origin xyz="0 0 1.26" rpy="0 0 0" />
+        <parent link="mass" />
+        <child link="head" />
     </joint>
 </robot>
 
