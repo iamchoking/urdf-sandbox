@@ -20,6 +20,7 @@ int main(int argc, char* argv[]) {
   raisim::RaisimServer server(&world);
 
   auto pogo = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/pogo/urdf/pogo_1D.urdf");
+  // pogo -> setComputeInverseDynamics(true);
 
   // std::cout << "robot was loaded!" << std::endl;
 
@@ -60,8 +61,10 @@ int main(int argc, char* argv[]) {
   jointPgain.tail(nJoints_).setConstant(50.0);
   jointDgain.setZero();
   jointDgain.tail(nJoints_).setConstant(0.2);
+
   jointPgain.tail(1) << 15000.0; //joint P gain for prismatic joint (N/m)
 
+  // setting spring / preload
   jointPgain[SPRING_GC_IDX] = SPRING_CONST_N_M;
   pTarget_[SPRING_GC_IDX] = -(PRELOAD_N / SPRING_CONST_N_M);
 
@@ -86,18 +89,34 @@ int main(int argc, char* argv[]) {
   std::cout << "DROP!" << std::endl;
 
   // SIM LOOP
+
+  // diagnostic variables
+  double z;
+  raisim::Vec<3> pos;
+
+  // controller variables
+  int latch = 0;
+
   for (size_t t = 0; t<TOTAL_STEPS; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
     server.integrateWorldThreadSafe();
     pogo->getState(gc, gv);
+    
+    // analyze step here
     std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
+    
+    z = pogo->getBodyCOM_W()[2][2];
+    std::cout << "  CoM Height: " << z*1000 << "mm" << std::endl;
+    pogo->getFramePosition("tip_foot_fixed",pos);
+    std::cout << "  Foot Pos  : " << pos[2] << std::endl;
 
     // set pd targets here
     // pTarget_.tail(1) << ((t/3000)%2 == 0) * 0.4; // some random periodic target
 
     // simplest reactive targeting
-    if(gv[0] > 0){pTarget_.tail(1) << 0.4;}
-    else{pTarget_.tail(1) << -2.0;}
+    // keep in mind, that this will control the base to fall with exactly 0.1m/s at the apex !
+    if(gv[0] < -0.1){pTarget_.tail(1) << 0.0;}
+    else{pTarget_.tail(1) << 0.4;}
 
     pogo->setPdTarget(pTarget_,vTarget_);
   }
