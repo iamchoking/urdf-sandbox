@@ -14,14 +14,13 @@ double SPRING_CONST_N_M = 15000;
 
 int main(int argc, char* argv[]) {
   auto binaryPath = raisim::Path::setFromArgv(argv[0]);
-
+  
   // create raisim world
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
   auto pogo = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/pogo/urdf/pogo_1D.urdf");
   // pogo -> setComputeInverseDynamics(true);
-
   // std::cout << "robot was loaded!" << std::endl;
 
   world.addGround();
@@ -83,10 +82,10 @@ int main(int argc, char* argv[]) {
   world.integrate1();
 
   for (int sec=3; sec>0; sec--){
-    std::cout << "Dropping in [" << sec << "]..." << std::endl;
+    std::cout << "Starting in [" << sec << "]..." << std::endl;
     raisim::USLEEP(1000000);
   }
-  std::cout << "DROP!" << std::endl;
+  std::cout << "START!" << std::endl;
 
   // SIM LOOP
 
