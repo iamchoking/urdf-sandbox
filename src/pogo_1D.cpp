@@ -8,7 +8,7 @@
 #include "random_coordinates.hpp"
 
 size_t TOTAL_STEPS = 20000;
-size_t SPRING_GC_IDX = 1; // this is a 1D version. Usually the spring gc idx is 8
+size_t SPRING_GC_IDX = 1; // this is a 1D version. Usually the spring gc idx is 7
 double PRELOAD_N = 1000;
 double SPRING_CONST_N_M = 15000;
 
@@ -91,6 +91,7 @@ int main(int argc, char* argv[]) {
 
   // diagnostic variables
   double z;
+  double z_prev;
   raisim::Vec<3> pos;
 
   // controller variables
@@ -104,6 +105,7 @@ int main(int argc, char* argv[]) {
     // analyze step here
     std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
     
+    z_prev = z;
     z = pogo->getBodyCOM_W()[2][2];
     std::cout << "  CoM Height: " << z*1000 << "mm" << std::endl;
     pogo->getFramePosition("tip_foot_fixed",pos);
@@ -114,7 +116,7 @@ int main(int argc, char* argv[]) {
 
     // simplest reactive targeting
     // keep in mind, that this will control the base to fall with exactly 0.1m/s at the apex !
-    if(gv[0] < -0.1){pTarget_.tail(1) << 0.0;}
+    if(z_prev > z){pTarget_.tail(1) << 0.0;}
     else{pTarget_.tail(1) << 0.4;}
 
     pogo->setPdTarget(pTarget_,vTarget_);

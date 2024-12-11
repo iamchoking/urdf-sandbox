@@ -10,4 +10,4 @@ include(cmake/helper.cmake)
 
 create_executable(pogo    src/pogo_sandbox.cpp)
 create_executable(pogo1D  src/pogo_1D.cpp)
-
+create_executable(pogoSC  src/pogo_showcase.cpp)
