@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(CS672_2024F_DYN)
+project(URDF_SANDBOX)
 
 # [IMPORTANT] LINK raisim so that other programs (like vscode) can see it!
 set(CMAKE_PREFIX_PATH ../raisimLib/raisim/linux)
@@ -11,3 +11,5 @@ include(cmake/helper.cmake)
 create_executable(pogo    src/pogo_sandbox.cpp)
 create_executable(pogo1D  src/pogo_1D.cpp)
 create_executable(pogoSC  src/pogo_showcase.cpp)
+
+create_executable(head    src/head_test.cpp)
