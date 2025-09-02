@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
-  auto head = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/urdf-head/urdf/urdf-head_fixed.urdf");
+  auto head = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/HEAD-URDF/urdf/head.urdf");
   // head -> setComputeInverseDynamics(true);
   // std::cout << "robot was loaded!" << std::endl;
 
