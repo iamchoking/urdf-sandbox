@@ -1,0 +1,3 @@
+[submodule "resource/head"]
+	path = resource/head
+	url = https://github.com/iamchoking/HEAD-URDF
