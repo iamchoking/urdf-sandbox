@@ -1,3 +1,9 @@
 [submodule "resource/head"]
 	path = resource/head
 	url = https://github.com/iamchoking/HEAD-URDF
+[submodule "resource/raibo2"]
+	path = resource/raibo2
+	url = git@github.com:railabatkaist/RAIBO2-URDF.git
+[submodule "resource/raipal"]
+	path = resource/raipal
+	url = git@github.com:iamchoking/RAIPAL-URDF.git
