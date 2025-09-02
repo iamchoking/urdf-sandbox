@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
   jointPgain *= 200;
   // jointPgain[1] = 1000.0; // adduction needs stronger gravity compensation
   jointDgain.setOnes();
-  jointDgain *= 30.0;
+  jointDgain *= 20.0;
 
   // unpowered joint indices: 4/5
   jointPgain[4] = 0.0;
@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting in [" << sec << "]..." << std::endl;
     raisim::USLEEP(1000000);
   }
-  size_t TRAJECTORY_STEPS = 1000;
+  size_t TRAJECTORY_STEPS = 750;
   std::vector<Eigen::VectorXd> trajectory_L, trajectory_R;
 
   auto jointLimits_R = raipal_R->getJointLimits();
@@ -116,14 +116,16 @@ int main(int argc, char* argv[]) {
 
     trajectory_R.push_back(positive_full);
     trajectory_R.push_back(negative_full);
-    trajectory_R.push_back(gc_init_);
+    // trajectory_R.push_back(gc_init_);
     
     trajectory_L.push_back(negative_full);
     trajectory_L.push_back(positive_full);
-    trajectory_L.push_back(gc_init_);
+    // trajectory_L.push_back(gc_init_);
 
     std::cout << "  Joint " << i << ": [" << jointLimits_R[i][0] << ", " << jointLimits_R[i][1] << "]" << std::endl;
   }
+  trajectory_L.push_back(gc_init_);
+  trajectory_R.push_back(gc_init_);
   trajectory_R[trajectory_R.size()-1][0] =  0.1;
   trajectory_L[trajectory_L.size()-1][0] = -0.1;
 
