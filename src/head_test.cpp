@@ -7,7 +7,6 @@
 #include "raisim/RaisimServer.hpp"
 #include "random_coordinates.hpp"
 
-
 size_t TOTAL_STEPS = 20000;
 size_t SPRING_GC_IDX = 1; // this is a 1D version. Usually the spring gc idx is 7
 double PRELOAD_N = 1000;
