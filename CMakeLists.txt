@@ -16,7 +16,6 @@ create_executable(head    src/head_test.cpp)
 
 create_executable(raipal_ragdoll   src/raipal_ragdoll.cpp)
 create_executable(raipal   src/raipal.cpp)
-create_executable(raipal_IK   src/raipal_IK.cpp)
 
 create_executable(minitaur src/minitaur.cpp)
 create_executable(minitaur_ragdoll src/minitaur_ragdoll.cpp)
