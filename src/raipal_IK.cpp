@@ -12,15 +12,11 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
-  // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
-  // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
-  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_R.urdf");
-  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_L.urdf");
+  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
 
   // unpowered joint indices: 4/5
 
   raipal_R->setName("raipal_R");
-  raipal_L->setName("raipal_L");
 
   // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal_R/urdf/raipal_R_disabled.urdf");
 
@@ -34,7 +30,7 @@ int main(int argc, char* argv[]) {
 
   // Declare variables (should be in private section)
   int gcDim_, gvDim_, nJoints_ = 7;   // unpowered joint indices: 4/5
-  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_R_, pTarget_L_, dTarget_;
+  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_R_, dTarget_;
   //   int obDim_ = 0, actionDim_ = 0;
 
   gcDim_ = raipal_R->getGeneralizedCoordinateDim();
@@ -49,12 +45,6 @@ int main(int argc, char* argv[]) {
   gc.setZero();
   gv.setZero();
 
-  // gc << 
-  //   0.0, 0.0;
-
-  // gv << 
-  //   0.0, 0.0;
-
   /// initialize containers
   gc_.setZero(gcDim_);
   gc_init_.setZero(gcDim_);
@@ -62,7 +52,6 @@ int main(int argc, char* argv[]) {
   gv_init_.setZero(gvDim_);
 
   pTarget_R_.setZero(gcDim_);
-  pTarget_L_.setZero(gcDim_);
   dTarget_.setZero(gvDim_);
 
   /// set pd gains
@@ -84,15 +73,11 @@ int main(int argc, char* argv[]) {
   raipal_R->setPdGains(jointPgain, jointDgain);
   raipal_R->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
-  raipal_L->setPdGains(jointPgain, jointDgain);
-  raipal_L->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
-
   // utils::gcRandomize(gc);
   // gc[2] = gc[2] + 3;
   // utils::gvRandomize(gv,15);
 
   raipal_R->setState(gc, gv);
-  raipal_L->setState(gc, gv);
 
   server.launchServer();
   server.focusOn(raipal_R);
@@ -104,11 +89,13 @@ int main(int argc, char* argv[]) {
     std::cout << "Starting in [" << sec << "]..." << std::endl;
     raisim::USLEEP(1000000);
   }
+
   size_t TRAJECTORY_STEPS = 750;
-  std::vector<Eigen::VectorXd> trajectory_L, trajectory_R;
+  std::vector<Eigen::VectorXd> trajectory_R;
 
   auto jointLimits_R = raipal_R->getJointLimits();
   std::cout << "Joint Limits:" << std::endl;
+
   for(int i=0; i<jointLimits_R.size(); i++){
     if(i == 4 || i == 5){continue;} // skip unpowered joints
     Eigen::VectorXd negative_full = Eigen::VectorXd::Zero(gcDim_);
@@ -119,29 +106,22 @@ int main(int argc, char* argv[]) {
     trajectory_R.push_back(positive_full);
     trajectory_R.push_back(negative_full);
     // trajectory_R.push_back(gc_init_);
-    
-    trajectory_L.push_back(negative_full);
-    trajectory_L.push_back(positive_full);
-    // trajectory_L.push_back(gc_init_);
-
+ 
     std::cout << "  Joint " << i << ": [" << jointLimits_R[i][0] << ", " << jointLimits_R[i][1] << "]" << std::endl;
   }
-  trajectory_L.push_back(gc_init_);
+
   trajectory_R.push_back(gc_init_);
-  trajectory_R[trajectory_R.size()-1][0] =  0.1;
-  trajectory_L[trajectory_L.size()-1][0] = -0.1;
-
-
-  Eigen::VectorXd finalPose_R(gcDim_);
-  finalPose_R << 0.37,-0.70,0.69,0.8,0,0,-0.1,0.25,0.79;
-  Eigen::VectorXd finalPose_L(gcDim_);
-  // finalPose_L << 0.37,-0.70,0.69,0.8,0,0,-0.25,0.25,0.5;
-  finalPose_L << 0.37,-0.70,0.69,0.8,0,0,-0.1,0.25,0.79;
 
   // SIM LOOP
   size_t current_step = 0;
   std::cout << "START!" << std::endl;
-  server.startRecordingVideo("raipal_urdf_demo.mp4");
+  // server.startRecordingVideo("raipal_urdf_demo.mp4");
+
+  Eigen::MatrixXd J_ee, J_ee_pos, J_ee_rot;
+  // std::cout << "Frame Idx of R_ee: " << std::endl;
+  // std::cout << raipal_R->getFrameIdxByLinkName("R_ee") << std::endl;
+
+  // the "advance" part
   for (size_t t = 0; t<TOTAL_STEPS; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
     server.integrateWorldThreadSafe();
@@ -150,23 +130,32 @@ int main(int argc, char* argv[]) {
     // analyze step here
     // std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
 
+    J_ee     = Eigen::MatrixXd::Zero(6,9); // 7dof robot with 2 upowered joints (idx: 4/5)
+    J_ee_pos = Eigen::MatrixXd::Zero(3,9); // 7dof robot with 2 upowered joints (idx: 4/5)
+    J_ee_rot = Eigen::MatrixXd::Zero(3,9); // 7dof robot with 2 upowered joints (idx: 4/5)
+
+    raipal_R->getDenseFrameJacobian(raipal_R->getFrameIdxByLinkName("R_ee"), J_ee_pos);
+    // std::cout << "End-Effector Positional Jacobian:\n" << J_ee_pos << std::endl;
+    raipal_R->getDenseFrameRotationalJacobian(raipal_R->getFrameIdxByLinkName("R_ee"), J_ee_rot);
+    // std::cout << "End-Effector Rotational Jacobian:\n" << J_ee_rot << std::endl;
+
+    J_ee << 
+      J_ee_pos,
+      J_ee_rot;
+
     // set pd targets here
+
     if(t%TRAJECTORY_STEPS == 0){
       if(current_step < trajectory_R.size()){
         pTarget_R_ = trajectory_R[current_step];
-        pTarget_L_ = trajectory_L[current_step];
-        std::cout << "Moving to next trajectory point: " << current_step << "/" << trajectory_R.size() << std::endl;
+        std::cout << "Moving to next trajectory point: " << current_step + 1 << "/" << trajectory_R.size() << std::endl;
+        std::cout << "End-Effector Jacobian at step " << t << ":\n" << J_ee << std::endl;
+        std::cout << "gv at step " << t << ":\n" << gv.transpose() << std::endl;
       }
-      else if(current_step == trajectory_R.size()){
-        pTarget_R_ = finalPose_R;
-        pTarget_L_ = finalPose_L;
-        std::cout << "Trajectory Finished. Moving to final pose." << std::endl;
-      }
-      else if(current_step > trajectory_R.size() + 2){
+      else if(current_step > trajectory_R.size() + 1){
         break;
       }
       raipal_R->setPdTarget(pTarget_R_,dTarget_);
-      raipal_L->setPdTarget(pTarget_L_,dTarget_);
       current_step++;
     }
 
