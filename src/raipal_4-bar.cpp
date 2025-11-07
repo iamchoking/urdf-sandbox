@@ -4,6 +4,7 @@
 #include "random_coordinates.hpp"
 
 #include <cmath>
+#include <iomanip>
 
 size_t TOTAL_STEPS = 200000;
 
@@ -11,11 +12,11 @@ size_t TOTAL_STEPS = 200000;
 /// @param gc 9D generalized coordinate vector (fills in gc[4], gc[5] from gc[3])
 void cfbIK(Eigen::VectorXd &gc){
 
-  // calculate gc[5]
+  // calculate gc[5] from gc[3]
 
   // Quadratic expression: 160000*cosa1^2 - 602400*cosa1 + 160000*sina1^2 + 567009
-  double cosa1 = std::cos(gc[3] - 0.0224990394);
-  double sina1 = std::sin(gc[3] - 0.0224990394);
+  double cosa1 = std::cos(gc[3] - 0.02249827895);
+  double sina1 = std::sin(gc[3] - 0.02249827895);
 
   double quad_expr = 
       160000.0 * cosa1 * cosa1 
@@ -24,59 +25,64 @@ void cfbIK(Eigen::VectorXd &gc){
     + 567009.0;
     
   // Square root expression
-  double sqrt_inner = 3.2620735e11 * cosa1 
-                    + 3.4269867e11 * cosa1 * sina1 * sina1 
-                    - 7.317723e11 * cosa1 * cosa1 
-                    + 3.4269867e11 * cosa1 * cosa1 * cosa1 
-                    - 4.5511111e10 * cosa1 * cosa1 * cosa1 * cosa1 
-                    - 8.6642058e10 * sina1 * sina1 
-                    - 4.5511111e10 * sina1 * sina1 * sina1 * sina1 
-                    - 9.1022222e10 * cosa1 * cosa1 * sina1 * sina1 
-                    + 1.6657711e11;
+  double sqrt_inner = 
+      3.2620769e11 * cosa1 
+    + 3.4269867e11 * cosa1 * sina1 * sina1 
+    - 7.3177239e11 * cosa1 * cosa1 
+    + 3.4269867e11 * cosa1 * cosa1 * cosa1 
+    - 4.5511111e10 * cosa1 * cosa1 * cosa1 * cosa1 
+    - 8.664215e10  * sina1 * sina1 
+    - 4.5511111e10 * sina1 * sina1 * sina1 * sina1 
+    - 9.1022222e10 * cosa1 * cosa1 * sina1 * sina1 
+    + 1.6657692e11;
   
   double sqrt_term = std::sqrt(sqrt_inner);
   
   // Calculate Y component (first argument of atan2)
-  double term1 = 8.2463372e15 * cosa1 * cosa1 
-                - 3.104746e16 * cosa1 
-                + 8.2463372e15 * sina1 * sina1 
-                + 1.7126637e16;
+  double term1 = 
+      4.9478023e16 * cosa1 * cosa1 
+    - 1.8628476e17 * cosa1 
+    + 4.9478023e16 * sina1 * sina1 
+    + 1.0275987e17;
   
-  double sinb1_p1 = -(8.0843973e-17 * term1) / sina1;
+  double sinb1_p1 = -(1.3473996e-17 * term1) / sina1;
   
-  double term2_inner = 1.5461882e13 * sina1 * sqrt_term 
-                      - 3.0229392e19 * cosa1 
-                      - 3.2985349e18 * cosa1 * sina1 * sina1 
-                      + 1.8628476e19 * cosa1 * cosa1 
-                      - 3.2985349e18 * cosa1 * cosa1 * cosa1 
-                      + 6.2094919e18 * sina1 * sina1 
-                      + 1.2896358e19;
+  double term2_inner = 
+      9.2771294e13 * sina1 * sqrt_term 
+    - 1.8137637e20 * cosa1 
+    - 1.9791209e19 * cosa1 * sina1 * sina1 
+    + 1.1177085e20 * cosa1 * cosa1 
+    - 1.9791209e19 * cosa1 * cosa1 * cosa1 
+    + 3.7256952e19 * sina1 * sina1 
+    + 7.7378183e19;
   
-  double sinb1_p2 = -(8.0843973e-17 * (400.0 * cosa1 - 753.0) * term2_inner) 
-                  / (sina1 * quad_expr);
+  double sinb1_p2 = 
+    -(1.3473996e-17 * (400.0 * cosa1 - 753.0) * term2_inner) / (sina1 * quad_expr);
   
   double sinb1 = sinb1_p1 + sinb1_p2;
   
   // Calculate X component (second argument of atan2)
-  double x_numerator = 156472.34 * cosa1 
-                      + 0.5 * sina1 * sqrt_term 
-                      - 294559.18;
-  
-  double cosb1 = 0.66666667 * cosa1 
-            - (1.0 * x_numerator) / quad_expr 
-            - 1.255;
+  double x_numerator = 
+      156472.23 * cosa1 
+    + 0.5 * sina1 * sqrt_term 
+    - 294558.97;
 
-  gc[5] = std::atan2(sinb1, cosb1) - 0.9998834205;
+  double cosb1 = 
+      0.66666667 * cosa1 
+    - x_numerator / quad_expr 
+    - 1.255;
+
+  gc[5] = std::atan2(sinb1, cosb1) - 0.99988266;
   if(gc[5] < -M_PI){
       gc[5] += 2.0 * M_PI;
   }
 
   // calculate gc[4]
-  double l1 = 60.0, l2 = 45.0, l3 = 85.4748;
-  double a = M_PI/2 - (gc[3] - 0.0224990394);
+  double l1 = 60.0, l2 = 45.0, l3 = 85.47477864;
+  double a = M_PI/2 - (gc[3] - 0.02249827895);
   double b = std::acos((l1*sina1 + l2*sinb1)/l3);
 
-  gc[4] = 2.72271 - (a + b);
+  gc[4] = 2.722713633 - (a + b);
 
 }
 
@@ -89,8 +95,8 @@ int main(int argc, char* argv[]) {
 
   // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
   // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
-  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
-  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
+  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_R.urdf");
+  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_L.urdf");
 
   // unpowered joint indices: 4/5
 
@@ -175,6 +181,7 @@ int main(int argc, char* argv[]) {
   /// if you are using an old version of Raisim, you need this line
   world.integrate1();
 
+  // get joint limits
   auto jointLimits_R = raipal_R->getJointLimits();
   auto jointLimits_L = raipal_L->getJointLimits();
 
@@ -183,22 +190,33 @@ int main(int argc, char* argv[]) {
     std::cout << "Joint " << i << ": R[" << jointLimits_R[i][0] << ", " << jointLimits_R[i][1] << "]" << " L[" << jointLimits_L[i][0] << ", " << jointLimits_L[i][1] << "]" << std::endl;
   }
 
+  // ground-truth test
+  double gtInputDeg[] = {0.0,10.0,20.0,30.0,40.0,50.0,60.0,70.0,80.0,89.1304};
+
+  for (double input : gtInputDeg){
+    gc[3] = input * M_PI / 180.0;
+    cfbIK(gc);
+    std::cout << std::setprecision(10) << std::endl;
+    std::cout << "Input: " << input << " deg, Output: " << gc[5] * 180.0 / M_PI << " deg" << std::endl;
+  }
+
   // COUNTDOUWN
+  std::cout << "====== SWEEP TEST ======" << std::endl;
   for (int sec=3; sec>0; sec--){
     std::cout << "Starting in [" << sec << "]..." << std::endl;
     raisim::USLEEP(1000000);
   }
+  std::cout << "START!" << std::endl;
 
   // SIM LOOP
   size_t current_step = 0;
-  std::cout << "START!" << std::endl;
   server.startRecordingVideo("raipal_urdf_demo.mp4");
 
   double incr = 0.001;
 
   std::cout << "Nominal gc[3]: " << gc_[3] << ", gc[5]: " << gc_[5] << std::endl;
 
-  for (size_t t = 0; t<2000; t++){
+  for (size_t t = 0; t<4000; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
     server.integrateWorldThreadSafe();
     raipal_R->getState(gc, gv);
@@ -209,7 +227,7 @@ int main(int argc, char* argv[]) {
     gc_[3] += incr;
     if (gc_[3] >= jointLimits_R[3][1] || gc_[3] <= jointLimits_R[3][0]) {
       incr = -incr;
-      std::cout << "Reversing direction at step " << t << ", gc[3]: " << gc_[3] << ", gc[5]: " << gc_[5] << std::endl;
+      std::cout << "Reversing direction at step " << t << ", gc[3]: " << gc_[3] * 180.0 / M_PI << "deg, gc[5]: " << gc_[5] * 180.0 / M_PI << "deg" << std::endl;
     }
 
     cfbIK(gc_);
@@ -218,6 +236,14 @@ int main(int argc, char* argv[]) {
     raipal_L->setState(gc_,gv_);
   }
 
+  // COUNTDOUWN
+  std::cout << "====== Loop Closure Comparison ======" << std::endl;
+  for (int sec=3; sec>0; sec--){
+    std::cout << "Starting in [" << sec << "]..." << std::endl;
+    raisim::USLEEP(1000000);
+  }
+  std::cout << "START!" << std::endl;
+
   gc_.setZero();
   gv_.setZero();
   incr = 0.003;
@@ -225,13 +251,23 @@ int main(int argc, char* argv[]) {
   raipal_L->setState(gc_,gv_);
 
   Eigen::VectorXd gc_IK(gcDim_);
+  double maxError = 0.0;
+  double avgError = 0.0;
 
-  for (size_t t = 0; t<10000; t++){
+  size_t simSteps = 3000;
+
+  for (size_t t = 0; t<simSteps; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
     server.integrateWorldThreadSafe();
 
     gc_[3] += incr;
-    if (gc_[3] >= jointLimits_R[3][1] + 0.1 || gc_[3] <= jointLimits_R[3][0] - 0.1) {
+
+    gc_[1] -= incr*2;
+    gc_[0] += incr*3;
+    gc_[7] += incr*3;
+    gc_[8] += incr*3;
+
+    if (gc_[3] >= jointLimits_R[3][1] + 0.3 || gc_[3] <= jointLimits_R[3][0] - 0.3) {
       incr = -incr;
     }
 
@@ -239,19 +275,24 @@ int main(int argc, char* argv[]) {
     raipal_R->setPdTarget(gc_,gv_);
     raipal_L->setPdTarget(gc_,gv_);
 
+    raipal_R->getState(gc, gv);
+    gc_IK = gc;
+    cfbIK(gc_IK);
+    double err_4 = (gc_IK[4] - gc[4]) * 180 / M_PI;
+    double err_5 = (gc_IK[5] - gc[5]) * 180 / M_PI;
+    maxError = std::max(maxError, err_5);
+    avgError += err_5 / simSteps;
+
     if(t%10 == 0){
-      raipal_R->getState(gc, gv);
-      gc_IK = gc;
-      cfbIK(gc_IK);
-      double err_4 = (gc_IK[4] - gc[4]) * 180 / M_PI;
-      double err_5 = (gc_IK[5] - gc[5]) * 180 / M_PI;
       if(err_4 > 0.01 || err_5 > 0.01){
         std::cout << "Warning: Large IK error at step " << t << std::endl;
         std::cout << "[" << t << "] gc[3]: " << gc[3] << ": gc[4]: " << gc_IK[4] << " err: " << err_4 << "deg, gc[5]: " << gc_IK[5] << " err: " << err_5 << "deg" << std::endl;
       }
     }
-
   }
+
+  std::cout << "Maximum error: " << maxError << " deg" << std::endl;
+  std::cout << "Average error: " << avgError << " deg" << std::endl;
 
   server.stopRecordingVideo();
   server.killServer();
