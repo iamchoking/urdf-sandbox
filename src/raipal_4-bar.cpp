@@ -8,9 +8,9 @@
 
 size_t TOTAL_STEPS = 200000;
 
-/// @brief Crossed 4-bar linkage inverse kinematics
+/// @brief Crossed 4-bar linkage inverse kinematics (closed-form full solution, ~1e-9 rad error)
 /// @param gc 9D generalized coordinate vector (fills in gc[4], gc[5] from gc[3])
-void cfbIK(Eigen::VectorXd &gc){
+void cfbFK(Eigen::VectorXd &gc){
 
   // calculate gc[5] from gc[3]
 
@@ -79,11 +79,32 @@ void cfbIK(Eigen::VectorXd &gc){
 
   // calculate gc[4]
   double l1 = 60.0, l2 = 45.0, l3 = 85.47477864;
+
   double a = M_PI/2 - (gc[3] - 0.02249827895);
   double b = std::acos((l1*sina1 + l2*sinb1)/l3);
 
   gc[4] = 2.722713633 - (a + b);
 
+}
+
+/// @brief Crossed 4-bar linkage inverse kinematics (closed-form full solution, ~1e-4 rad error)
+/// @param gc 9D generalized coordinate vector (fills in gc[4], gc[5] from gc[3])
+void cfbFK2(Eigen::VectorXd &gc){
+  static double coeff5[17] = {7.487348861572753, -88.17268027058002, 470.7676589474978, -1507.949571146181, 3232.924175366478, -4903.587201465159, 5428.248858581333, -4464.681332539945, 2751.745273804874, -1265.589676288956, 418.4687974259759, -86.36058832217348, 6.540591054554072, -1.820824957906633, 2.514881046035373, 1.022698355939166, 0.000002629580961635315};
+  static double coeff4[17] = {-4.599352352699746, 54.74231689702444, -295.2311950384566, 953.4731854791298, -2052.475077842654, 3099.83081925634, -3363.608943070999, 2636.542385991094, -1477.728449862623, 579.0562233124353, -157.9024440428828, 35.05094543077983, -7.773109367008759, -0.656408504334005, 0.798469056970581, 2.098468226080274, -0.000001063969759856979};
+  static double l0 = 112.95, l1 = 60.0, l2 = 45.0, l3 = 85.47477864;
+  static double a0 = -0.02249827895, b0 = 0.99988266, c0 = 2.722713633;
+
+  gc[5] = 0;
+  gc[4] = 0;
+  double gc3_pow = 1.0;
+  for(int i=16; i>=0; i--){
+    gc[5] += coeff5[i] * gc3_pow;
+    gc[4] += coeff4[i] * gc3_pow;
+    gc3_pow *= gc[3];
+  }
+
+  // gc[4] = c0 - ( M_PI/2 - (gc[3] + a0) + std::acos( (l1*std::sin(gc[3]+a0) + l2*std::sin(gc[5]+b0)) / l3 ) );
 }
 
 int main(int argc, char* argv[]) {
@@ -195,7 +216,7 @@ int main(int argc, char* argv[]) {
 
   for (double input : gtInputDeg){
     gc[3] = input * M_PI / 180.0;
-    cfbIK(gc);
+    cfbFK(gc);
     std::cout << std::setprecision(10) << std::endl;
     std::cout << "Input: " << input << " deg, Output: " << gc[5] * 180.0 / M_PI << " deg" << std::endl;
   }
@@ -215,11 +236,11 @@ int main(int argc, char* argv[]) {
   double incr = 0.001;
 
   std::cout << "Nominal gc[3]: " << gc_[3] << ", gc[5]: " << gc_[5] << std::endl;
+  Eigen::VectorXd gc__(gcDim_);
 
   for (size_t t = 0; t<4000; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
     server.integrateWorldThreadSafe();
-    raipal_R->getState(gc, gv);
     
     // analyze step here
     // std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
@@ -230,7 +251,23 @@ int main(int argc, char* argv[]) {
       std::cout << "Reversing direction at step " << t << ", gc[3]: " << gc_[3] * 180.0 / M_PI << "deg, gc[5]: " << gc_[5] * 180.0 / M_PI << "deg" << std::endl;
     }
 
-    cfbIK(gc_);
+    gc__ = gc_;
+
+    auto curTime = std::chrono::high_resolution_clock::now();
+    cfbFK(gc_);
+    if(t%100 == 0){
+      std::cout << "Closed-form IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
+      curTime = std::chrono::high_resolution_clock::now();
+
+      cfbFK2(gc__);
+
+      std::cout << "Polynomial IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
+      curTime = std::chrono::high_resolution_clock::now();
+
+      std::cout << std::setprecision(10) << std::endl;
+      std::cout << "Polynomial IK approx. Error: gc[5]: " << (gc__[5] - gc_[5]) * 180.0 / M_PI << " deg / gc[4]: " << (gc__[4] - gc_[4]) * 180.0 / M_PI << " deg"<< std::endl;
+    }
+
     // std::cout << "step " << t << "/" << TOTAL_STEPS << " :" << gc_[3] << " " << gc_[5] << std::endl;
     raipal_R->setState(gc_,gv_);
     raipal_L->setState(gc_,gv_);
@@ -277,13 +314,13 @@ int main(int argc, char* argv[]) {
 
     raipal_R->getState(gc, gv);
     gc_IK = gc;
-    cfbIK(gc_IK);
+    cfbFK2(gc_IK);
     double err_4 = (gc_IK[4] - gc[4]) * 180 / M_PI;
     double err_5 = (gc_IK[5] - gc[5]) * 180 / M_PI;
     maxError = std::max(maxError, err_5);
     avgError += err_5 / simSteps;
 
-    if(t%10 == 0){
+    if(t%100 == 0){
       if(err_4 > 0.01 || err_5 > 0.01){
         std::cout << "Warning: Large IK error at step " << t << std::endl;
         std::cout << "[" << t << "] gc[3]: " << gc[3] << ": gc[4]: " << gc_IK[4] << " err: " << err_4 << "deg, gc[5]: " << gc_IK[5] << " err: " << err_5 << "deg" << std::endl;
