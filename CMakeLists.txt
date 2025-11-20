@@ -14,9 +14,10 @@ create_executable(pogoSC  src/pogo_showcase.cpp)
 
 create_executable(head    src/head_test.cpp)
 
-create_executable(raipal_ragdoll   src/raipal_ragdoll.cpp)
 create_executable(raipal   src/raipal.cpp)
+create_executable(raipal_ragdoll   src/raipal_ragdoll.cpp)
 create_executable(raipal_4bar   src/raipal_4-bar.cpp)
+create_executable(raipal_pd   src/raipal_pd.cpp)
 
 create_executable(minitaur src/minitaur.cpp)
 create_executable(minitaur_ragdoll src/minitaur_ragdoll.cpp)
