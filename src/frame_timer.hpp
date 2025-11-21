@@ -7,11 +7,19 @@
 
 class FrameTimer {
 public:
-  FrameTimer(double timestep): timestep_(std::chrono::microseconds(static_cast<long>(timestep * 1e6))), frame_count_(0), started_(false), enabled_(true) {}
+  FrameTimer(double timestep, bool silent = true): timestep_(std::chrono::microseconds(static_cast<long>(timestep * 1e6))), frame_count_(0), started_(false), enabled_(true), silent_(silent) {}
 
   void enable(double timestep)  {setTimestep(timestep); enable();}
   void enable()  {enabled_ = true ;started_ = false;}
   void disable() {enabled_ = false;started_ = false;}
+
+  void reset(){
+    started_ = false;
+    frame_count_ = 0;
+    elapsed_ = std::chrono::microseconds(0);
+    nominal_ = std::chrono::microseconds(0);
+    delta_ = std::chrono::microseconds(0);
+  }
 
   /// @brief starts the frame timer (DO NOT call this manually if using tick())
   void start() {
@@ -38,7 +46,7 @@ public:
     }
     else if (delta_.count() < -1e5){
       if(frame_count_ % 1000 == 0){
-        std::cout << "[FrameTimer] Frame #" << frame_count_ << " is " << -delta_.count()/1000.0 << " ms slower than nominal." <<std::endl;
+        if(!silent_){std::cout << "[FrameTimer-WARN] Frame #" << frame_count_ << " is " << -delta_.count()/1000.0 << " ms slower than nominal." <<std::endl;}
       }
     }
   }
@@ -53,7 +61,7 @@ public:
     tick();
     started_ = false;
     elapsed_ = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - loop_start_);
-    // std::cout << "[FrameTimer] Finished.\n\tTimestep: " << timestep_ << " s.\n\tTotal elapsed: " << elapsed_.count()/1e6 << " s." <<std::endl;
+    // if(!silent_) std::cout << "[FrameTimer] Finished.\n\tTimestep: " << timestep_ << " s.\n\tTotal elapsed: " << elapsed_.count()/1e6 << " s." <<std::endl;
     return elapsed_.count() / 1.0e6;
   }
 
@@ -61,6 +69,10 @@ public:
   /// @param timestep timestep in seconds
   inline void setTimestep(double timestep){
     timestep_ = std::chrono::microseconds(static_cast<long>(timestep * 1e6));
+  }
+
+  double getElapsedTime() const {
+    return elapsed_.count() / 1.0e6;
   }
 
 private:
@@ -76,6 +88,7 @@ private:
   std::chrono::microseconds nominal_;
   std::chrono::microseconds delta_;
   std::chrono::high_resolution_clock::time_point loop_start_;
+  bool silent_;
 };
 
 #endif // FRAME_TIMER_HPP

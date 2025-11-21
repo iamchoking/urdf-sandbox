@@ -8,16 +8,13 @@ find_package(raisim CONFIG REQUIRED)
 set(CMAKE_CXX_STANDARD 17)
 include(cmake/helper.cmake)
 
-create_executable(pogo    src/pogo_sandbox.cpp)
-create_executable(pogo1D  src/pogo_1D.cpp)
-create_executable(pogoSC  src/pogo_showcase.cpp)
+# Automatically create executables for all .cpp files in src directory
+file(GLOB SOURCE_FILES "src/*.cpp")
 
-create_executable(head    src/head_test.cpp)
-
-create_executable(raipal   src/raipal.cpp)
-create_executable(raipal_ragdoll   src/raipal_ragdoll.cpp)
-create_executable(raipal_4bar   src/raipal_4-bar.cpp)
-create_executable(raipal_pd   src/raipal_pd.cpp)
-
-create_executable(minitaur src/minitaur.cpp)
-create_executable(minitaur_ragdoll src/minitaur_ragdoll.cpp)
+foreach(SOURCE_FILE ${SOURCE_FILES})
+    # Get filename without path and extension
+    get_filename_component(EXEC_NAME ${SOURCE_FILE} NAME_WE)
+    
+    # Create executable
+    create_executable(${EXEC_NAME} ${SOURCE_FILE})
+endforeach()

@@ -7,7 +7,14 @@
 #include "frame_timer.hpp"
 #include "table_printer.hpp"
 
-double SIM_TIME = 30.0;
+// double SIM_DT = 0.0025;
+double SIM_DT = 0.001;
+double MAX_TIME = 15.0;
+// double LPF_CUTOFF_FREQ = 100.0; // Hz (negative value for no cutoff)
+double LPF_CUTOFF_FREQ = 20.0; // Hz (negative value for no cutoff)
+// double LPF_CUTOFF_FREQ = 100.0; // Hz (negative value for no cutoff)
+bool RANDOM_DT = false;
+
 // raisim::ControlMode::Type MODE = raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE;
 raisim::ControlMode::Type MODE = raisim::ControlMode::FORCE_AND_TORQUE;
 
@@ -38,8 +45,8 @@ int main(int argc, char* argv[]) {
   raisim::RaisimServer server(&world);
 
   // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal.urdf");
-  auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_saber_R.urdf");
-  auto raipalTarget = server.addVisualArticulatedSystem("Target", std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_saber_R.urdf", 1.0,0.0,0.0,0.5);
+  auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf");
+  auto raipalTarget = server.addVisualArticulatedSystem("Target", std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf", 1.0,0.0,0.0,0.5);
   // unpowered joint indices: 4/5
 
   raipal->setName("raipal");
@@ -53,44 +60,34 @@ int main(int argc, char* argv[]) {
   std::cout << "robot was loaded!" << std::endl;
 
   // world.addGround();
-  world.setTimeStep(0.001);
+  world.setTimeStep(SIM_DT);
 
   // Declare variables (should be in private section)
-  int gcDim_, gvDim_, nJoints_ = 7;   // unpowered joint indices: 4/5
-  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, dTarget_;
-  //   int obDim_ = 0, actionDim_ = 0;
+  int gcDim, gvDim, nJoints = 7;   // unpowered joint indices: 4/5
+  gcDim = raipal->getGeneralizedCoordinateDim();
+  gvDim = raipal->getDOF();
+  std::cout << "gcDim: " << gcDim << ", gvDim: " << gvDim << std::endl;
 
-  gcDim_ = raipal->getGeneralizedCoordinateDim();
-  gvDim_ = raipal->getDOF();
-  std::cout << "gcDim: " << gcDim_ << ", gvDim: " << gvDim_ << std::endl;
-  // nJoints_ = gvDim_ - 6; //for floating base
-  // nJoints_ = 2;
+  Eigen::VectorXd gc(gcDim), gv(gvDim);
+  Eigen::VectorXd gf(gvDim);
+  gc.setZero();gv.setZero();gf.setZero();
 
-  Eigen::VectorXd gc(gcDim_), gv(gvDim_);
-  Eigen::VectorXd gf(gvDim_);
+  // low-pass filter implementation
+  double lpf_alpha;
+  if(LPF_CUTOFF_FREQ < 0.0){lpf_alpha = 1.0;}
+  else{
+    lpf_alpha = 2.0 * M_PI * LPF_CUTOFF_FREQ * SIM_DT / (2.0 * M_PI * LPF_CUTOFF_FREQ * SIM_DT + 1.0);
+    std::cout << "Low-pass filter applied with cutoff frequency: " << LPF_CUTOFF_FREQ << " Hz, alpha: " << lpf_alpha << std::endl;
+  }
+  Eigen::VectorXd gcRaw(gcDim), gvRaw(gvDim);
 
-  // nominal positions & velocity
-  gc.setZero();
-  gv.setZero();
-  gf.setZero();
-
-  // gc << 
-  //   0.0, 0.0;
-
-  // gv << 
-  //   0.0, 0.0;
-
-  /// initialize containers
-  gc_.setZero(gcDim_);
-  gc_init_.setZero(gcDim_);
-  gv_.setZero(gvDim_);
-  gv_init_.setZero(gvDim_);
-
-  pTarget_.setZero(gcDim_);
-  dTarget_.setZero(gvDim_);
+  /// initial (nominal) pose
+  Eigen::VectorXd gc_init, gv_init, pTarget_, dTarget_;
+  gc_init.setZero(gcDim) ; gv_init.setZero(gvDim);
+  pTarget_.setZero(gcDim); dTarget_.setZero(gvDim);
 
   /// set pd gains
-  Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
+  Eigen::VectorXd jointPgain(gvDim), jointDgain(gvDim);
   jointPgain.setOnes();
   jointPgain *= 200;
   // jointPgain[1] = 1000.0; // adduction needs stronger gravity compensation
@@ -103,21 +100,21 @@ int main(int argc, char* argv[]) {
   jointDgain[4] = 0.0;
   jointDgain[5] = 0.0;
 
-  // jointDgain.tail(nJoints_).setConstant(1);
+  // jointDgain.tail(nJoints).setConstant(1);
 
   if(MODE == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE){
     raipal->setPdGains(jointPgain, jointDgain);
   } else{
     // when you call setPdGains, you also change the mode to PD_PLUS_FEEDFORWARD_TORQUE!
-    // raipal->setPdGains(Eigen::VectorXd::Zero(gvDim_), Eigen::VectorXd::Zero(gvDim_));
+    // raipal->setPdGains(Eigen::VectorXd::Zero(gvDim), Eigen::VectorXd::Zero(gvDim));
   }
-  raipal->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
+  raipal->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim));
 
   // utils::gcRandomize(gc);
   // gc[2] = gc[2] + 3;
   // utils::gvRandomize(gv,15);
 
-  raipal->setState(gc, gv);
+  raipal->setState(gc_init, gv_init);
 
   server.launchServer();
   server.focusOn(raipal);
@@ -136,21 +133,21 @@ int main(int argc, char* argv[]) {
   // std::cout << "Joint Limits:" << std::endl;
   // for(int i=0; i<jointLimits_R.size(); i++){
   //   if(i == 4 || i == 5){continue;} // skip unpowered joints
-  //   Eigen::VectorXd negative_full = Eigen::VectorXd::Zero(gcDim_);
-  //   Eigen::VectorXd positive_full = Eigen::VectorXd::Zero(gcDim_);
+  //   Eigen::VectorXd negative_full = Eigen::VectorXd::Zero(gcDim);
+  //   Eigen::VectorXd positive_full = Eigen::VectorXd::Zero(gcDim);
   //   negative_full[i] = jointLimits_R[i][0];
   //   positive_full[i] = jointLimits_R[i][1];
 
   //   waypoints.push_back(positive_full);
   //   waypoints.push_back(negative_full);
-  //   // waypoints.push_back(gc_init_);
+  //   // waypoints.push_back(gc_init);
 
   //   std::cout << "  Joint " << i << ": [" << jointLimits_R[i][0] << ", " << jointLimits_R[i][1] << "]" << std::endl;
   // }
-  // waypoints.push_back(gc_init_);
+  // waypoints.push_back(gc_init);
   // waypoints[waypoints.size()-1][0] =  0.1;
 
-  // Eigen::VectorXd finalPose_R(gcDim_);
+  // Eigen::VectorXd finalPose_R(gcDim);
   // finalPose_R << 0.37,-0.70,0.69,0.8,0,0,-0.1,0.25,0.79;
 
   // // SIM LOOP
@@ -158,7 +155,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "START!" << std::endl;
 
-  pTarget_ << 1, 0, 0, 1, 0, 0, 0, 0, 0.1;
+  // pTarget_ << 1, 0, 0, 1, 0, 0, 0, 0, 0.1;
 
   if(MODE == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE){
     dTarget_.setZero();
@@ -170,7 +167,6 @@ int main(int argc, char* argv[]) {
 
   ft.enable(world.getTimeStep());
 
-  size_t TOTAL_STEPS = static_cast<size_t>(SIM_TIME / world.getTimeStep());
   size_t t = 0;
 
   bprinter::TablePrinter tp(&std::cout);
@@ -181,41 +177,31 @@ int main(int argc, char* argv[]) {
   tp.AddColumn("D Actual",10);
   tp.AddColumn("Force",10);
 
-  for (t = 0; t<TOTAL_STEPS; t++){
-    ft.tick();
-    // ft.step(world.getTimeStep());
+  double random_dt = SIM_DT;
+  while (ft.getElapsedTime() < MAX_TIME) {
+    ft.tick(random_dt);
+    // randomize simulation timestep (low pass filter)!
+    raipal->getState(gcRaw, gvRaw);
     
-    raipal->getState(gc, gv);
+    if(MODE == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE){
+      // no low-pass filtering
+      gc = gcRaw;
+      gv = gvRaw;
+    } else {
+      // FORCE_AND_TORQUE mode
+      // apply low-pass filter
+      gc = lpf_alpha * gcRaw + (1.0 - lpf_alpha) * gc;
+      gv = lpf_alpha * gvRaw + (1.0 - lpf_alpha) * gv;
+    }
     
-    // analyze step here
-    // std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
-
-    // set pd targets here
-
-    // if(t%TRAJECTORY_STEPS == 0){
-    //   if(current_step < waypoints.size()){
-    //     pTarget_ = waypoints[current_step];
-    //     std::cout << "Moving to next trajectory point: " << current_step + 1 << "/" << waypoints.size() << ": " << pTarget_.transpose() << std::endl;
-    //   }
-    //   else if(current_step == waypoints.size()){
-    //     pTarget_ = finalPose_R;
-    //     std::cout << "Moving to final pose           " << std::endl;
-    //   }
-    //   else if(current_step > waypoints.size() + 2){
-    //     // std::cout << "Final timestep: " << t << std::endl;
-    //     break;
-    //   }
-    //   raipal->setPdTarget(pTarget_,dTarget_);
-    //   current_step++;
-    // }
     if(MODE == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE){
       raipal->setPdTarget(pTarget_,dTarget_);
     } else {
       // FORCE_AND_TORQUE mode
-      Eigen::VectorXd tau(gvDim_);
+      Eigen::VectorXd tau(gvDim);
       tau.setZero();
       // simple pd control to compute feedforward torque
-      for(int i=0; i<gcDim_; i++){
+      for(int i=0; i<gcDim; i++){
         double p_err = pTarget_[i] - gc[i];
         double d_err = dTarget_[i] - gv[i];
         tau[i] = jointPgain[i] * p_err + jointDgain[i] * d_err;
@@ -226,23 +212,33 @@ int main(int argc, char* argv[]) {
     server.integrateWorldThreadSafe();
     gf = raipal->getGeneralizedForce().e();
 
-    if((t >= 0 && t < 10) || (t >= 3000 && t < 3010) || (t >= 6000 && t < 6010)){
-      std::cout << "MODE: " << (raipal->getControlMode() == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE ? "PD+FF" : "F & T") << "/ Time: " << world.getWorldTime() << std::endl;
+    // if((t >= 0 && t < 10) || (t >= 3000 && t < 3010) || (t >= 6000 && t < 6010)){
+    if(true){
+      std::cout << "MODE: " << (raipal->getControlMode() == raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE ? "PD+FF" : "F & T") << " / Time: " << world.getWorldTime() << " / dt: " << world.getTimeStep() << " / alpha: " << lpf_alpha << std::endl;
 
       tp.PrintHeader();
-      for (int i=0; i<gcDim_; i++){
+      for (int i=0; i<gcDim; i++){
         tp << i
             << pTarget_[i]
-            << gc[i]
+            << gcRaw[i]
             << dTarget_[i]
-            << gv[i]
+            << gvRaw[i]
             << gf[i];
       }
       tp.PrintFooter();
     }
+
+    // randomize dt (0.001 ~ 0.0025)
+    if(RANDOM_DT){
+      random_dt = 0.001 + (0.0015 * ((double) rand() / RAND_MAX));
+      lpf_alpha = 2.0 * M_PI * LPF_CUTOFF_FREQ * random_dt / (2.0 * M_PI * LPF_CUTOFF_FREQ * random_dt + 1.0);
+
+      world.setTimeStep(random_dt);
+      // ft.step(world.getTimeStep());
+    }
   }
   
-  std::cout << "Nominal Time: " << t * world.getTimeStep() << " seconds" << std::endl;
+  std::cout << "Nominal Time: " << world.getWorldTime() << " seconds" << std::endl;
   std::cout << "Elapsed Time: " << ft.end() << " seconds" << std::endl;
 
   server.killServer();
