@@ -9,10 +9,10 @@
 
 // double DT_MIN = 0.001;
 double DT_MIN  = 0.0010;
-double DT_MAX  = 0.0017;
+double DT_MAX  = 0.0025;
 double DT_STEP = 0.0001;
 
-double CUTOFF_MIN  = 10.0;
+double CUTOFF_MIN  =  5.0;
 double CUTOFF_MAX  = 50.0;
 double CUTOFF_STEP =  1.0;
 
@@ -81,8 +81,8 @@ int main(int argc, char* argv[]) {
     // auto indicator = server.addVisualSphere("indicator", 0.05, 1.0,1.0,0.0,0.8,"",true);
     indicator = server -> addVisualSphere("indicator", 0.05, 0.0,0.0,0.0,0.8,"",true);
     indicator->setPosition(Eigen::Vector3d(0.0, 0.0, 0.0));
-    raipalTarget_FT = server->addVisualArticulatedSystem("Target_FT", urdf_prefix + "_R.urdf", 1.0,0.0,0.0,0.5);
-    raipalTarget_PD = server->addVisualArticulatedSystem("Target_PD", urdf_prefix + "_L.urdf", 1.0,0.0,0.0,0.5);
+    raipalTarget_FT = server->addVisualArticulatedSystem("Target_FT", urdf_prefix + "_R.urdf", 1.0,0.0,0.0,0.3);
+    raipalTarget_PD = server->addVisualArticulatedSystem("Target_PD", urdf_prefix + "_L.urdf", 1.0,0.0,0.0,0.3);
   }
 
   // unpowered joint indices: 4/5
@@ -178,13 +178,17 @@ int main(int argc, char* argv[]) {
 
   size_t numFail = 0;
 
+  size_t testCount = 0;
   tpResult.PrintHeader();
-  for(int dtIdx = 0; dtIdx < num_dt; dtIdx++){
-    dtRange_max = DT_MIN + (DT_MAX - DT_MIN) * (dtIdx) /(num_dt-1);
+  // for(int dtIdx = 0; dtIdx < num_dt; dtIdx++){
+    // dtRange_max = DT_MIN + (DT_MAX - DT_MIN) * (dtIdx) /(num_dt-1);
+  dtRange_max = DT_MIN;
+  while (dtRange_max <= DT_MAX + 1e-8){
     dt = dtRange_max;
-    for(int cutoffIdx = 0; cutoffIdx < num_cutoff; cutoffIdx++){
-      cutoff_freq = CUTOFF_MIN + (CUTOFF_MAX - CUTOFF_MIN) * (cutoffIdx) / (num_cutoff - 1);
-
+    // for(int cutoffIdx = 0; cutoffIdx < num_cutoff; cutoffIdx++){
+      //   cutoff_freq = CUTOFF_MIN + (CUTOFF_MAX - CUTOFF_MIN) * (cutoffIdx) / (num_cutoff - 1);
+    cutoff_freq = CUTOFF_MIN;
+    while(cutoff_freq <= CUTOFF_MAX + 1e-8){
       // std::cout << "[Test " << dtIdx * NUM_CUTOFF + cutoffIdx + 1 << "/" << NUM_DT * NUM_CUTOFF << "]: DT Range [" << dtRange_min << " ~ " << dtRange_max << "],  Cutoff: " << cutoff_freq << " Hz ";
       // std::flush(std::cout);
       
@@ -291,10 +295,11 @@ int main(int argc, char* argv[]) {
         nominal_time += world.getWorldTime();
         elapsed_time += ft.end();
       }
+      testCount++;
       // std::cout <<  " -> " << numFail << "/" << NUM_SAMPLES << " failed." << std::endl;
       
       tpResult 
-        << (dtIdx * num_cutoff + cutoffIdx + 1)
+        << testCount
         << dtRange_max
         << cutoff_freq
         << numFail;
@@ -302,9 +307,12 @@ int main(int argc, char* argv[]) {
       // no longer need to try further failure cases (higher cutoff freq)
       if(numFail == NUM_SAMPLES){break;}        
       numFail = 0;
+      cutoff_freq += CUTOFF_STEP;
     }
     tpResult.PrintFooter();
     numFail = 0;
+
+    dtRange_max += DT_STEP;
   }
   tpResult.PrintFooter();
 
