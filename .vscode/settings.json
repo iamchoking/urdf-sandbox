@@ -10,6 +10,7 @@
     },
     "cmake.allowCommentsInPresetsFile": true,
     "cmake.allowUnsupportedPresetsVersions": true,
+    "cmake.generator": "Unix Makefiles",
     "files.associations": {
         "ostream": "cpp",
         "array": "cpp",
