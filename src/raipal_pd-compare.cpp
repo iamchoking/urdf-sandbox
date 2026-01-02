@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     server = std::make_unique<raisim::RaisimServer>(&world);
     // auto indicator = server.addVisualSphere("indicator", 0.05, 1.0,1.0,0.0,0.8,"",true);
     indicator = server -> addVisualSphere("indicator", 0.05, 0.0,0.0,0.0,0.8,"",true);
-    indicator->setPosition(Eigen::Vector3d(0.0, 0.0, 0.0));
+    indicator->setPosition(Eigen::Vector3d(0.0, 0.0, 0.8));
     raipalTarget_FT = server->addVisualArticulatedSystem("Target_FT", urdf_prefix + "_R.urdf", 1.0,0.0,0.0,0.3);
     raipalTarget_PD = server->addVisualArticulatedSystem("Target_PD", urdf_prefix + "_L.urdf", 1.0,0.0,0.0,0.3);
   }
