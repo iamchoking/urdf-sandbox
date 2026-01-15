@@ -6,6 +6,10 @@
 #include <cmath>
 #include <iomanip>
 
+#include <raipal_kinematics/raipal_kinematics.hpp>
+
+namespace rk = raipal::kinematics;
+
 size_t TOTAL_STEPS = 200000;
 
 /// @brief Crossed 4-bar linkage inverse kinematics (closed-form full solution, ~1e-9 rad error)
@@ -86,44 +90,6 @@ void cfbFKAnalytic(Eigen::VectorXd &gc){
   gc[4] = 2.722713633 - (a + b);
 
 }
-
-/// @brief Crossed 4-bar linkage inverse kinematics (closed-form full solution, ~1e-4 rad error)
-/// @param gc 9D generalized coordinate vector (fills in gc[4], gc[5] from gc[3])
-void cfbFK(Eigen::VectorXd &gc){
-  static double coeff5[17] = {7.487348861572753, -88.17268027058002, 470.7676589474978, -1507.949571146181, 3232.924175366478, -4903.587201465159, 5428.248858581333, -4464.681332539945, 2751.745273804874, -1265.589676288956, 418.4687974259759, -86.36058832217348, 6.540591054554072, -1.820824957906633, 2.514881046035373, 1.022698355939166, 0.000002629580961635315};
-  static double coeff4[17] = {-4.599352352699746, 54.74231689702444, -295.2311950384566, 953.4731854791298, -2052.475077842654, 3099.83081925634, -3363.608943070999, 2636.542385991094, -1477.728449862623, 579.0562233124353, -157.9024440428828, 35.05094543077983, -7.773109367008759, -0.656408504334005, 0.798469056970581, 2.098468226080274, -0.000001063969759856979};
-  static double l0 = 112.95, l1 = 60.0, l2 = 45.0, l3 = 85.47477864;
-  static double a0 = -0.02249827895, b0 = 0.99988266, c0 = 2.722713633;
-
-  gc[5] = 0;
-  gc[4] = 0;
-  double gc3_pow = 1.0;
-  for(int i=16; i>=0; i--){
-    gc[5] += coeff5[i] * gc3_pow;
-    gc[4] += coeff4[i] * gc3_pow;
-    gc3_pow *= gc[3];
-  }
-  
-  // gc[4] = c0 - ( M_PI/2 - (gc[3] + a0) + std::acos( (l1*std::sin(gc[3]+a0) + l2*std::sin(gc[5]+b0)) / l3 ) );
-}
-
-void cfbFK(Eigen::VectorXd &gc, Eigen::VectorXd &gv){
-  cfbFK(gc);
-  static double coeffGV5[17] = {330.1514673459376, -3939.920472235199, 21319.39656007634, -69182.34049371608, 150034.7654546927, -229354.9209106861, 253935.6748254774, -205870.6560746802, 121976.630364867, -52021.60108263157, 15489.35547273981, -3096.107249114025, 433.0072547668175, -57.21741621150876, -0.9670218724995983, 4.921276349693374, 1.022525952484172};
-  static double coeffGV4[17] = {-160.5479994847285, 1895.920138547342, -10134.44134516569, 32423.08074300719, -69176.96131680353, 103833.9828875482, -112772.7868033985, 89865.6754559566, -52817.85947080839, 22895.36338178862, -7274.853311104497, 1636.804103542675, -218.7685080450584, 6.311919990384402, -3.93273889555925, 1.64496743133799, 2.097821834064398};
-
-  double gc3_pow = 1.0;
-  double factor5 = 0.0;
-  double factor4 = 0.0;
-  for(int i=16; i>=0; i--){
-    factor5 += coeffGV5[i] * gc3_pow;
-    factor4 += coeffGV4[i] * gc3_pow;
-    gc3_pow *= gc[3];
-  }
-  gv[5] = factor5 * gv[3];
-  gv[4] = factor4 * gv[3];
-}
-
 
 int main(int argc, char* argv[]) {
   auto binaryPath = raisim::Path::setFromArgv(argv[0]);
@@ -277,7 +243,7 @@ int main(int argc, char* argv[]) {
       std::cout << "Closed-form IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
       curTime = std::chrono::high_resolution_clock::now();
 
-      cfbFK(gc__);
+      rk::cfbFK(gc__);
 
       std::cout << "Polynomial IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
       curTime = std::chrono::high_resolution_clock::now();
@@ -344,7 +310,7 @@ int main(int argc, char* argv[]) {
     raipal_R->getState(gc, gv);
     gc_IK = gc;
     gv_IK = gv;
-    cfbFK(gc_IK, gv_IK);
+    rk::cfbFK(gc_IK, gv_IK);
 
     // all errors calculated in degrees
     double err_gc4 = (gc_IK[4] - gc[4]) * 180 / M_PI;
