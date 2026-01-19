@@ -3,10 +3,13 @@
 #include "raisim/RaisimServer.hpp"
 #include "random_coordinates.hpp"
 
+#include <chrono>
 #include <cmath>
 #include <iomanip>
+#include <Eigen/Geometry>
 
-#include <raipal_kinematics/raipal_kinematics.hpp>
+#include <raipal_kinematics/raipal_cfb.hpp>
+#include <raipal_kinematics/raipal_kin.hpp>
 
 namespace rk = raipal::kinematics;
 
@@ -14,7 +17,7 @@ size_t TOTAL_STEPS = 200000;
 
 /// @brief Crossed 4-bar linkage inverse kinematics (closed-form full solution, ~1e-9 rad error)
 /// @param gc 9D generalized coordinate vector (fills in gc[4], gc[5] from gc[3])
-void cfbFKAnalytic(Eigen::VectorXd &gc){
+void cfbForwardAnalytic(Eigen::VectorXd &gc){
 
   // calculate gc[5] from gc[3]
 
@@ -100,8 +103,14 @@ int main(int argc, char* argv[]) {
 
   // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
   // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
-  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_R.urdf");
-  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_L.urdf");
+  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/";
+  const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-10_R.urdf";
+  const std::string raipalLeftUrdf = raipalUrdfDir + "raipal_stub-10_L.urdf";
+
+  auto raipal_R = world.addArticulatedSystem(raipalRightUrdf);
+  auto raipal_L = world.addArticulatedSystem(raipalLeftUrdf);
+  rk::RaipalKin rightArmFk(raipalRightUrdf);
+  std::string kRightTipFrame = "RE_tip_fixed";
 
   // unpowered joint indices: 4/5
 
@@ -200,7 +209,7 @@ int main(int argc, char* argv[]) {
 
   for (double input : gtInputDeg){
     gc[3] = input * M_PI / 180.0;
-    cfbFKAnalytic(gc);
+    cfbForwardAnalytic(gc);
     std::cout << std::setprecision(10) << std::endl;
     std::cout << "Input: " << input << " deg, Output: " << gc[5] * 180.0 / M_PI << " deg" << std::endl;
   }
@@ -222,9 +231,32 @@ int main(int argc, char* argv[]) {
   std::cout << "Nominal gc[3]: " << gc_[3] << ", gc[5]: " << gc_[5] << std::endl;
   Eigen::VectorXd gc__(gcDim_);
 
+  const double arrowRadius = 0.05;
+  const double arrowHeight = 0.3;
+  auto rightTipZArrow = server.addVisualArrow("raipal_right_tip_z", arrowRadius, arrowHeight, 0.0, 0.4, 1.0, 0.9);
+  auto rightTipXArrow = server.addVisualArrow("raipal_right_tip_x", arrowRadius, arrowHeight, 1.0, 0.1, 0.1, 0.9);
+
+  const auto updateArrow = [](raisim::Visuals* arrow, const Eigen::Vector3d& position, const Eigen::Vector3d& direction){
+    if (!arrow) {
+      return;
+    }
+    Eigen::Vector3d dir = direction;
+    if (dir.norm() < 1e-9) {
+      dir = Eigen::Vector3d::UnitZ();
+    } else {
+      dir.normalize();
+    }
+    const Eigen::Quaterniond rotation = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitZ(), dir);
+    Eigen::Vector4d quat;
+    quat << rotation.w(), rotation.x(), rotation.y(), rotation.z();
+    arrow->setPosition(position);
+    arrow->setOrientation(quat);
+  };
+
   for (size_t t = 0; t<4000; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
-    server.integrateWorldThreadSafe();
+    // server.integrateWorldThreadSafe();
+    // std::cout << "[SWEEP] Step " << t << " integrated" << std::endl; //_debug
     
     // analyze step here
     // std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
@@ -236,25 +268,57 @@ int main(int argc, char* argv[]) {
     }
 
     gc__ = gc_;
+    // std::cout << "[SWEEP] Step " << t << " gc3=" << gc_[3] << " gc4=" << gc_[4] << " gc5=" << gc_[5] << std::endl; //_debug
 
-    auto curTime = std::chrono::high_resolution_clock::now();
-    cfbFKAnalytic(gc_);
-    if(t%100 == 0){
-      std::cout << "Closed-form IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
-      curTime = std::chrono::high_resolution_clock::now();
+    rk::cfbForward(gc_);
 
-      rk::cfbFK(gc__);
+    const auto fkStart = std::chrono::high_resolution_clock::now();
+    const auto fkResult = rightArmFk.fk(kRightTipFrame, gc_);
+    const auto fkDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - fkStart).count();
+    // std::cout << "[SWEEP] Step " << t << " RaipalKin evaluated" << std::endl; //_debug
 
-      std::cout << "Polynomial IK took : " << std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - curTime).count() << " ns" << std::endl;
-      curTime = std::chrono::high_resolution_clock::now();
-
-      std::cout << std::setprecision(10);
-      std::cout << "Polynomial IK approx. Error: gc[5]: " << (gc__[5] - gc_[5]) * 180.0 / M_PI << " deg / gc[4]: " << (gc__[4] - gc_[4]) * 180.0 / M_PI << " deg"<< std::endl << std::endl;
-    }
-
-    // std::cout << "step " << t << "/" << TOTAL_STEPS << " :" << gc_[3] << " " << gc_[5] << std::endl;
     raipal_R->setState(gc_,gv_);
     raipal_L->setState(gc_,gv_);
+    // std::cout << "[SWEEP] Step " << t << " state applied" << std::endl; //_debug
+
+    const Eigen::Vector3d tipPosition = fkResult.first;
+    const Eigen::Matrix3d tipOrientation = fkResult.second;
+
+    const Eigen::Vector3d zAxis = tipOrientation.col(2);
+    const Eigen::Vector3d xAxis = tipOrientation.col(0);
+    updateArrow(rightTipZArrow, tipPosition, zAxis);
+    updateArrow(rightTipXArrow, tipPosition, xAxis);
+    // std::cout << "[SWEEP] Step " << t << " arrows updated" << std::endl; //_debug
+
+    // calculate FK error
+    raisim::Vec<3> tipPositionActualVec;
+    raisim::Mat<3, 3> tipOrientationActualMat;
+    raipal_R->getFramePosition(kRightTipFrame, tipPositionActualVec);
+    raipal_R->getFrameOrientation(kRightTipFrame, tipOrientationActualMat);
+    const Eigen::Vector3d tipPositionActual = tipPositionActualVec.e();
+    const Eigen::Matrix3d tipOrientationActual = tipOrientationActualMat.e();
+    const double fkPositionError = (tipPosition - tipPositionActual).norm();
+
+    
+    if(t%100 == 0){
+      const auto analyticStart = std::chrono::high_resolution_clock::now();
+      cfbForwardAnalytic(gc_);
+      const auto analyticDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - analyticStart).count();
+      // std::cout << "[SWEEP] Step " << t << " analytic CFB updated" << std::endl; //_debug
+
+      const auto polynomialStart = std::chrono::high_resolution_clock::now();
+      rk::cfbForward(gc__);
+      const auto polynomialDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - polynomialStart).count();
+
+      std::cout << "Closed-form CFB took : " << analyticDuration << " ns" << std::endl;
+      std::cout << "Polynomial CFB took : " << polynomialDuration << " ns" << std::endl;
+      std::cout << "Raipal FK took : " << fkDuration << " ns" << std::endl;
+      std::cout << "FK tip position error : " << fkPositionError * 1000.0 << " mm" << std::endl;
+      // std::cout << "[SWEEP] Step " << t << " diagnostic report" << std::endl; //_debug
+
+      std::cout << std::setprecision(10);
+      std::cout << "Polynomial CFB approx. Error: gc[5]: " << (gc__[5] - gc_[5]) * 180.0 / M_PI << " deg / gc[4]: " << (gc__[4] - gc_[4]) * 180.0 / M_PI << " deg"<< std::endl << std::endl;
+    }
   }
 
   // COUNTDOUWN
@@ -271,8 +335,8 @@ int main(int argc, char* argv[]) {
   raipal_R->setState(gc_,gv_);
   raipal_L->setState(gc_,gv_);
 
-  Eigen::VectorXd gc_IK(gcDim_);
-  Eigen::VectorXd gv_IK(gvDim_);
+  Eigen::VectorXd gc_CFB(gcDim_);
+  Eigen::VectorXd gv_CFB(gvDim_);
   double maxErrorPos = 0.0;
   double avgErrorPos = 0.0;
   double maxErrorGV4 = 0.0;
@@ -308,15 +372,15 @@ int main(int argc, char* argv[]) {
     raipal_L->setPdTarget(gc_,gv_);
 
     raipal_R->getState(gc, gv);
-    gc_IK = gc;
-    gv_IK = gv;
-    rk::cfbFK(gc_IK, gv_IK);
+    gc_CFB = gc;
+    gv_CFB = gv;
+    rk::cfbForward(gc_CFB, gv_CFB);
 
     // all errors calculated in degrees
-    double err_gc4 = (gc_IK[4] - gc[4]) * 180 / M_PI;
-    double err_gc5 = (gc_IK[5] - gc[5]) * 180 / M_PI;
-    double err_gv4 = (gv_IK[4] - gv[4]) * 180 / M_PI;
-    double err_gv5 = (gv_IK[5] - gv[5]) * 180 / M_PI;
+    double err_gc4 = (gc_CFB[4] - gc[4]) * 180 / M_PI;
+    double err_gc5 = (gc_CFB[5] - gc[5]) * 180 / M_PI;
+    double err_gv4 = (gv_CFB[4] - gv[4]) * 180 / M_PI;
+    double err_gv5 = (gv_CFB[5] - gv[5]) * 180 / M_PI;
     
     maxErrorPos = std::max(maxErrorPos, std::abs(err_gc5));
     avgErrorPos += std::abs(err_gc5) / simSteps;
