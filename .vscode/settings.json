@@ -78,5 +78,10 @@
     "python-envs.defaultPackageManager": "ms-python.python:conda",
     "python-envs.pythonProjects": [],
 
-    "terminal.integrated.scrollback": 10000
+    "terminal.integrated.scrollback": 10000,
+
+    "git.detectSubmodules": true,
+    "git.detectSubmodulesLimit": 20,
+    "git.autoRepositoryDetection": "subFolders",
+    "git.repositoryScanMaxDepth": 10,
 }
