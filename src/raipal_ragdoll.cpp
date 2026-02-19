@@ -69,6 +69,9 @@ int main(int argc, char* argv[]) {
   /// if you are using an old version of Raisim, you need this line
   world.integrate1();
 
+  std::cout << "Mass Matrix Diagonal" << std::endl;
+  std::cout << raipal->getMassMatrix().e().diagonal() << std::endl;
+
   for (int sec=3; sec>0; sec--){
     std::cout << "Starting in [" << sec << "]..." << std::endl;
     raisim::USLEEP(1000000);
@@ -91,6 +94,11 @@ int main(int argc, char* argv[]) {
     
     // analyze step here
     std::cout<<"STEP " << t << "/" << TOTAL_STEPS << std::endl;
+
+    // if(t == 0){
+    //   std::cout << "Mass Matrix Diagonal" << std::endl;
+    //   std::cout << raipal->getMassMatrix().e().diagonal() << std::endl;
+    // }
 
     // z = raipal->getBodyCOM_W()[2][2];
     // std::cout << "  CoM Height: " << z*1000 << "mm" << std::endl;
