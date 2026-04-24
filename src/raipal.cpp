@@ -12,29 +12,29 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
-  // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
-  // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
-  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf");
+  // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_R.urdf");
+  // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_L.urdf");
+  auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf");
   auto link = raipal_R->getLink("R_ee");
   std::cout << "stub-0_R has mass" << link.getWeight() << std::endl;
   std::cout << "stub-0_R has inertia" << link.getInertia() << std::endl;
   std::cout << "stub-0_R has com in parent frame" << link.getComPositionInParentFrame().e().transpose() << std::endl;
 
-  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-5_R.urdf");
+  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-5_R.urdf");
   link = raipal_R->getLink("R_ee");
   std::cout << "stub-5_R has mass" << link.getWeight() << std::endl;
   std::cout << "stub-5_R has inertia" << link.getInertia() << std::endl;
   std::cout << "stub-5_R has com in parent frame" << link.getComPositionInParentFrame().e().transpose() << std::endl;
 
-  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-10_R.urdf");
+  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-10_R.urdf");
   link = raipal_R->getLink("R_ee");
   std::cout << "stub-10_R has mass" << link.getWeight() << std::endl;
   std::cout << "stub-10_R has inertia" << link.getInertia() << std::endl;
   std::cout << "stub-10_R has com in parent frame" << link.getComPositionInParentFrame().e().transpose() << std::endl;
 
-  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf");
+  raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf");
 
-  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_L.urdf");
+  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_L.urdf");
 
   // unpowered joint indices: 4/5
 

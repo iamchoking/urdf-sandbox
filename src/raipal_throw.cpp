@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
   // hold_p_gain.setZero();
   // hold_d_gain.setZero();
 
-  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_L.urdf");
+  auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_L.urdf");
 
   raipal_L->setName("raipal");
 

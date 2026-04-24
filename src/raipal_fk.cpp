@@ -101,9 +101,9 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
-  // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_R.urdf");
-  // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_L.urdf");
-  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/";
+  // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_R.urdf");
+  // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_L.urdf");
+  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/";
   const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-10_R.urdf";
   const std::string raipalLeftUrdf = raipalUrdfDir + "raipal_stub-10_L.urdf";
 

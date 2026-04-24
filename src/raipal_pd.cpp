@@ -44,15 +44,15 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
-  // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal.urdf");
-  auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf");
-  auto raipalTarget = server.addVisualArticulatedSystem("Target", std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_R.urdf", 1.0,0.0,0.0,0.5);
+  // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal.urdf");
+  auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf");
+  auto raipalTarget = server.addVisualArticulatedSystem("Target", std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf", 1.0,0.0,0.0,0.5);
   // unpowered joint indices: 4/5
 
   raipal->setName("raipal");
   raipal->setControlMode(MODE);
 
-  // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_disabled.urdf");
+  // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_disabled.urdf");
 
   // auto raipal = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/head/urdf/head.urdf");
 

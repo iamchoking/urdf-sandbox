@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
   raisim::World world; // physics world
   std::unique_ptr<raisim::RaisimServer> server; // visualization server
   
-  std::string urdf_prefix = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal" + URDF_TYPE;
+  std::string urdf_prefix = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal" + URDF_TYPE;
   
   auto raipal_FT = world.addArticulatedSystem(urdf_prefix + "_R.urdf");
   raipal_FT->setName("raipal_FT");

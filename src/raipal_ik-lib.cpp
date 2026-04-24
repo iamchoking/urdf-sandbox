@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
 
   raisim::RaisimServer server(&world);
 
-  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/";
+  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/";
   const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-10_R.urdf";
 
   auto raipalRobot = world.addArticulatedSystem(raipalRightUrdf);
