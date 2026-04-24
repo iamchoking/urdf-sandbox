@@ -329,8 +329,8 @@ int main(int argc, char* argv[]) {
   }
   std::cout << "START!" << std::endl;
 
-  gc_.setZero();
-  gv_.setZero();
+  gc_.setZero(gcDim_);
+  gv_.setZero(gvDim_);
   incr = 0.003;
   raipal_R->setState(gc_,gv_);
   raipal_L->setState(gc_,gv_);
@@ -351,6 +351,8 @@ int main(int argc, char* argv[]) {
   double windowMaxErrGv5 = 0.0;
 
   size_t simSteps = 3000;
+
+  // std::cout << "Nominal gc[3]: " << gc_[3] << ", gc[5]: " << gc_[5] << std::endl;
 
   for (size_t t = 0; t<simSteps; t++){
     RS_TIMED_LOOP(world.getTimeStep()*2e6)
