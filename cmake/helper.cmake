@@ -23,8 +23,8 @@ function(create_executable app_name file_name)
         endif()
     endif()
 
-    # target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/utils)
-    target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/utils)
+    # target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/_utils)
+    target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/_utils)
 
     target_compile_definitions(${app_name} PRIVATE RESOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/resource)
 endfunction()
