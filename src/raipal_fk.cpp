@@ -103,9 +103,9 @@ int main(int argc, char* argv[]) {
 
   // auto raipal_R = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_R.urdf");
   // auto raipal_L = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_L.urdf");
-  const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/";
+  const std::string raipalUrdfDir   = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/";
   const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-10_R.urdf";
-  const std::string raipalLeftUrdf = raipalUrdfDir + "raipal_stub-10_L.urdf";
+  const std::string raipalLeftUrdf  = raipalUrdfDir + "raipal_stub-10_L.urdf";
 
   auto raipal_R = world.addArticulatedSystem(raipalRightUrdf);
   auto raipal_L = world.addArticulatedSystem(raipalLeftUrdf);
@@ -141,8 +141,8 @@ int main(int argc, char* argv[]) {
   Eigen::VectorXd gc(gcDim_), gv(gvDim_);
 
   // nominal positions & velocity
-  gc.setZero();
-  gv.setZero();
+  gc.setZero(gcDim_);
+  gv.setZero(gvDim_);
 
   // gc << 
   //   0.0, 0.0;
