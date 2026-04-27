@@ -42,7 +42,7 @@ void applyCorrectedElbowDynamics(
   Eigen::VectorXd tau7 = Eigen::VectorXd::Zero(7);
   tau7(3) = actuatorInertia * gearRatio * gearRatioDerivative * elbowVelocity * elbowVelocity;
   // tau7(3) = 0;
-  raipal7->setGeneralizedForce(tau7);
+  raipal7->setGeneralizedForce(tau7); // TODO: sign check
 }
 
 double getPlaybackTimestep(double simulationTimestep) {
@@ -250,7 +250,7 @@ int main(int argc, char* argv[]) {
     Eigen::VectorXd gc7 = Eigen::VectorXd::Zero(7);
     Eigen::VectorXd gv7 = Eigen::VectorXd::Zero(7);
 
-    gc9(3) = jointLimits9[3][1]; // fully flexed elbow actuator
+    gc9(3) = jointLimits9[3][1] - 0.05; // fully flexed elbow actuator
     rk9::cfbForward(gc9, gv9);
 
     gc7 << -gc9.head(3), -gc9.tail(4);
