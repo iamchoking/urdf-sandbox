@@ -12,3 +12,6 @@
 	path = resource/raipal
 	url = git@github.com:railabatkaist/RAIPAL-URDF.git
 	branch = main
+[submodule "src/raipal/raipal_solution"]
+	path = src/raipal/raipal_solution
+	url = git@github.com:railabatkaist/raipal_solution.git
