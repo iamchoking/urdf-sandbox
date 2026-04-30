@@ -36,12 +36,12 @@ class articulatedRaipal {
     std::vector<double> cfbDirections = {1.0}
   ): 
     robot_(robot),
-    RotorInertia_(robot_->getRotorInertia()),
-    MaxTorque_(robot_->getActuationUpperLimits().e()),
-    MinTorque_(robot_->getActuationLowerLimits().e()),
-    MaxVelocity_(robot_->getJointVelocityLimits())
+    rotorInertia_(robot_->getRotorInertia()),
+    maxTorque_(robot_->getActuationUpperLimits().e()),
+    minTorque_(robot_->getActuationLowerLimits().e()),
+    maxVelocity_(robot_->getJointVelocityLimits())
   {
-    // size_t dof = robot_->getDOF();
+    dof_ = robot_->getDOF();
     for(size_t i = 0; i < cfbIndices.size(); i++){
       actuatorStates_.push_back({cfbIndices[i], cfbDirections[i]});
     }
@@ -64,7 +64,10 @@ class articulatedRaipal {
     robot_->getState(gc, gv);
     ga = robot_->getGeneralizedAcceleration().e();
 
-    Eigen::VectorXd pTarget, dTarget, pGain, dGain;
+    Eigen::VectorXd pTarget(robot_->getGeneralizedCoordinateDim());
+    Eigen::VectorXd dTarget(robot_->getDOF());
+    Eigen::VectorXd pGain(robot_->getDOF());
+    Eigen::VectorXd dGain(robot_->getDOF());
     robot_->getPdTarget(pTarget, dTarget);
     robot_->getPdGains(pGain, dGain);
 
@@ -90,29 +93,55 @@ class articulatedRaipal {
       as.dGain   = dGain[as.idx] / (da * da);
 
       // ------- Joint-side update -------
-      MaxVelocity_[as.idx]  = MaxVelocity_[as.idx-1] / da;
-      RotorInertia_[as.idx] = RotorInertia_[as.idx-1] * da * da;
+      maxVelocity_[as.idx]  = maxVelocity_[as.idx-1] / da;
+      rotorInertia_[as.idx] = (rotorInertia_[as.idx-1] + cfb::actuatorInertia) * da * da;
 
-      tauCFB_[as.idx] = -as.sign * RotorInertia_[as.idx] * da * dda * gv[as.idx] * gv[as.idx];
-      MaxTorque_[as.idx]    = MaxTorque_[as.idx-1] * da;
-      MinTorque_[as.idx]    = MinTorque_[as.idx-1] * da;
+      tauCFB_[as.idx] = -as.sign * (rotorInertia_[as.idx-1] + cfb::actuatorInertia) * da * dda * gv[as.idx] * gv[as.idx];
+      maxTorque_[as.idx]    = maxTorque_[as.idx-1] * da;
+      minTorque_[as.idx]    = minTorque_[as.idx-1] * da;
     }
 
-    robot_->setJointVelocityLimits(MaxVelocity_);
-    robot_->setActuationLimits(MaxTorque_ + tauCFB_, MinTorque_ + tauCFB_);
-    robot_->setRotorInertia(RotorInertia_);
+    robot_->setJointVelocityLimits(maxVelocity_);
+    robot_->setActuationLimits(maxTorque_ + tauCFB_, minTorque_ + tauCFB_);
+    robot_->setRotorInertia(rotorInertia_);
     robot_->setGeneralizedForce(tauFF_ + tauCFB_);
 
     updated_ = true;
   }
+
   void resetUpdateFlag(bool updated = false) { updated_ = updated; }
+
+  // actuator-side methods
+  void getActuatorState(Eigen::VectorXd &genco, Eigen::VectorXd &genvel){
+    robot_->getState(genco, genvel);
+    for(auto& as : actuatorStates_){
+      genco[as.idx]  = as.pos;
+      genvel[as.idx] = as.vel;
+    }
+  }
+
+  void getActuatorPdTarget(Eigen::VectorXd &pTarget, Eigen::VectorXd &dTarget){
+    robot_->getPdTarget(pTarget, dTarget);
+    for(auto& as : actuatorStates_){
+      pTarget[as.idx] = as.pTarget;
+      dTarget[as.idx] = as.dTarget;
+    }
+  }
+
+  void getActuatorPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain){
+    robot_->getPdGains(pGain, dGain);
+    for(auto& as : actuatorStates_){
+      pGain[as.idx] = as.pGain;
+      dGain[as.idx] = as.dGain;
+    }
+  }
 
   // getters that need special care
   /**
    * @return the upper joint torque/force limit*/
   [[nodiscard]] const raisim::VecDyn getActuationUpperLimits() const {
     raisim::VecDyn tauUpper;
-    tauUpper = MaxTorque_;
+    tauUpper = maxTorque_;
     return tauUpper;
   }
 
@@ -120,7 +149,7 @@ class articulatedRaipal {
    * @return the lower joint torque/force limit*/
   [[nodiscard]] const raisim::VecDyn getActuationLowerLimits() const {
     raisim::VecDyn tauLower;
-    tauLower = MinTorque_;
+    tauLower = minTorque_;
     return tauLower;
   }
 
@@ -139,10 +168,40 @@ class articulatedRaipal {
 
   // BOOKMARK: start coding setters
   // setters that need special care
-  RAIPAL_SET_UPDATE(setRotorInertia)
-  RAIPAL_SET_UPDATE(setActuationLimits)
-  RAIPAL_SET_UPDATE(setJointVelocityLimits)
-  RAIPAL_SET_UPDATE(setGeneralizedForce)      // tauFF_
+
+  // RAIPAL_SET_UPDATE(setRotorInertia)
+  void setRotorInertia(const raisim::VecDyn &rotorInertia) {
+    rotorInertia_ = rotorInertia;
+    updateRaipal(true);
+  }
+
+  // RAIPAL_SET_UPDATE(setActuationLimits)
+  void setActuationLimits(const Eigen::VectorXd &upper, const Eigen::VectorXd &lower) {
+    maxTorque_ = upper;
+    minTorque_ = lower;
+    updateRaipal(true);
+  }
+
+  // RAIPAL_SET_UPDATE(setJointVelocityLimits)
+  void setJointVelocityLimits(const Eigen::VectorXd &velLimits) {
+    maxVelocity_ = velLimits;
+    updateRaipal(true);
+  }
+
+  // RAIPAL_SET_UPDATE(setGeneralizedForce)      // tauFF_
+  void setGeneralizedForce(const raisim::VecDyn &tau) { 
+    tauFF_ = tau.e();
+    tauCFB_.setZero();
+    robot_->setGeneralizedForce(tauFF_);
+    updateRaipal(true);
+  }
+
+  void setGeneralizedForce(const Eigen::VectorXd &tau) { 
+    tauFF_ = tau;
+    tauCFB_.setZero();
+    robot_->setGeneralizedForce(tauFF_);
+    updateRaipal(true);
+  }
 
   // setters that require updates
   RAIPAL_SET_UPDATE(setState)                 // gc, gv
@@ -335,13 +394,14 @@ private:
   };
 
   raisim::ArticulatedSystem* robot_ = nullptr;
+  size_t dof_;
 
   std::vector<actuatorState> actuatorStates_;
 
   bool updated_ = false;
   
-  raisim::VecDyn RotorInertia_, MaxVelocity_;
-  Eigen::VectorXd MaxTorque_, MinTorque_;
+  raisim::VecDyn rotorInertia_, maxVelocity_;
+  Eigen::VectorXd maxTorque_, minTorque_;
 
   Eigen::VectorXd tauFF_;   // feedforward term for rest of robot
   Eigen::VectorXd tauCFB_;  // feedforward term for CFB correction

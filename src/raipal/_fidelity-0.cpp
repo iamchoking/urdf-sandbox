@@ -7,7 +7,6 @@
 #include <limits>
 
 #include <raipal_kinematics/raipal_cfb.hpp>
-#include "ArticulatedRaipal.hpp"
 #include "raipal_solution/cfbSolution.hpp"
 #include "frame_timer.hpp"
 
@@ -22,28 +21,28 @@ double TEST4_DURATION  = 1.0;  // elbow drop test
 namespace rk9 = raipal::kinematics;
 
 void applyCorrectedElbowDynamics(
-    articulatedRaipal& raipal7,
+    raisim::ArticulatedSystem* raipal7,
     double elbowPosition,
     double elbowVelocity) {
   double actuatorPosition, gearRatio, gearRatioDerivative;
   cfb::evalCfb(cfb::fromJoint, -elbowPosition, actuatorPosition, gearRatio, gearRatioDerivative);
 
-  auto rotorInertia = raipal7.getRotorInertia();
+  auto rotorInertia = raipal7->getRotorInertia();
 
   // the offset corresponds to the inertia of elb_input / elb_bar
-  double actuatorInertia = rotorInertia[2] + cfb::actuatorInertia;
+  double actuatorInertia = rotorInertia[2] + 0.00134589;
   // actuatorInertia = 0;
   rotorInertia[3] = actuatorInertia * gearRatio * gearRatio;
   // rotorInertia[3] = rotorInertia[2];
 
-  raipal7.setRotorInertia(rotorInertia);
+  raipal7->setRotorInertia(rotorInertia);
 
   // qa = f(-q), so the reflected velocity-dependent term is
   // I * (dqa/dq) * (d2qa/dq2) * qdot^2 = -I * f'(-q) * f''(-q) * qdot^2.
   Eigen::VectorXd tau7 = Eigen::VectorXd::Zero(7);
   tau7(3) = actuatorInertia * gearRatio * gearRatioDerivative * elbowVelocity * elbowVelocity;
   // tau7(3) = 0;
-  raipal7.setGeneralizedForce(tau7); // TODO: sign check
+  raipal7->setGeneralizedForce(tau7); // TODO: sign check
 }
 
 double getPlaybackTimestep(double simulationTimestep) {
@@ -68,7 +67,7 @@ int main(int argc, char* argv[]) {
   // raipal_L->setName("raipal_L");
 
   auto raipal9 = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf");
-  articulatedRaipal raipal7(world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) +  "/raipal/urdf/raipal_stub-0_L.urdf"));
+  auto raipal7 = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) +  "/raipal/urdf/raipal_stub-0_L.urdf");
 
   // raipal -> setComputeInverseDynamics(true);
   std::cout << "both models loaded!" << std::endl;  
@@ -84,10 +83,10 @@ int main(int argc, char* argv[]) {
   //   int obDim_ = 0, actionDim_ = 0;
 
   std::cout << "right gcDim: " << raipal9->getGeneralizedCoordinateDim() << std::endl;
-  std::cout << "left  gcDim: " << raipal7.getGeneralizedCoordinateDim() << std::endl;
+  std::cout << "left  gcDim: " << raipal7->getGeneralizedCoordinateDim() << std::endl;
 
   raipal9->setPdGains(Eigen::VectorXd::Zero(9), Eigen::VectorXd::Zero(9));
-  raipal7.setPdGains(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
+  raipal7->setPdGains(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
   
   server.launchServer();
   server.focusOn(raipal7);
@@ -96,7 +95,7 @@ int main(int argc, char* argv[]) {
   world.integrate1();
   
   raipal9->setState(Eigen::VectorXd::Zero(9), Eigen::VectorXd::Zero(9));
-  raipal7.setState(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
+  raipal7->setState(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
 
   auto jointLimits9 = raipal9->getJointLimits();
   Eigen::VectorXd jointLimitsLower9 = Eigen::VectorXd::Zero(9);
@@ -109,7 +108,7 @@ int main(int argc, char* argv[]) {
 
   std::cout << "Mass Matrix Diagonal" << std::endl;
   std::cout << raipal9->getMassMatrix().e().diagonal().transpose() << std::endl;
-  std::cout << raipal7.getMassMatrix().e().diagonal().transpose() << std::endl;
+  std::cout << raipal7->getMassMatrix().e().diagonal().transpose() << std::endl;
 
   
   if(TEST1_NUM_POSES > 0){
@@ -133,7 +132,7 @@ int main(int argc, char* argv[]) {
     gc7 << -gc9.head(3), -gc9.tail(4);
 
     raipal9->setState(gc9, Eigen::VectorXd::Zero(9));
-    raipal7.setState(gc7, Eigen::VectorXd::Zero(7));
+    raipal7->setState(gc7, Eigen::VectorXd::Zero(7));
 
     std::cout << "Pose " << pose_idx << std::endl;
     std::cout << "  gc9: " << gc9.transpose() << std::endl;
@@ -162,7 +161,7 @@ int main(int argc, char* argv[]) {
     gv7 << -gv9.head(3), -gv9.tail(4);
 
     raipal9->setState(gc9, gv9);
-    raipal7.setState(gc7, gv7);
+    raipal7->setState(gc7, gv7);
 
     for (int sec=3; sec>0; sec--){
       std::cout << "Starting in [" << sec << "]..." << std::endl;
@@ -204,7 +203,7 @@ int main(int argc, char* argv[]) {
     gv7 << -gv9.head(3), -gv9.tail(4);
 
     raipal9->setState(gc9, gv9);
-    raipal7.setState(gc7, gv7);
+    raipal7->setState(gc7, gv7);
 
     for (int sec=3; sec>0; sec--){
       std::cout << "Starting in [" << sec << "]..." << std::endl;
@@ -225,12 +224,12 @@ int main(int argc, char* argv[]) {
 
   Eigen::VectorXd gc7(7), gv7(7);
 
-  auto rotorInertia = raipal7.getRotorInertia();
+  auto rotorInertia = raipal7->getRotorInertia();
   FrameTimer test3Timer(playbackTimestep, false);
   for (size_t t = 0; t<test3Steps; t++){
     test3Timer.tick();
 
-    raipal7.getState(gc7, gv7);
+    raipal7->getState(gc7, gv7);
 
     applyCorrectedElbowDynamics(raipal7, gc7(3), gv7(3));
 
@@ -238,7 +237,7 @@ int main(int argc, char* argv[]) {
   }
   test3Timer.end();
 
-  raipal7.setRotorInertia(rotorInertia); // restore original inertia
+  raipal7->setRotorInertia(rotorInertia); // restore original inertia
 
 
   size_t test4Steps = (size_t)(TEST4_DURATION/world.getTimeStep());
@@ -271,13 +270,13 @@ int main(int argc, char* argv[]) {
     dGain7(3) = 0.0;
 
     raipal9->setPdGains(pGain9, dGain9);
-    raipal7.setPdGains(pGain7, dGain7);
+    raipal7->setPdGains(pGain7, dGain7);
     raipal9->setPdTarget(Eigen::VectorXd::Zero(9), Eigen::VectorXd::Zero(9));
-    raipal7.setPdTarget(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
+    raipal7->setPdTarget(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
     raipal9->setGeneralizedForce(Eigen::VectorXd::Zero(9));
 
     raipal9->setState(gc9, gv9);
-    raipal7.setState(gc7, gv7);
+    raipal7->setState(gc7, gv7);
     applyCorrectedElbowDynamics(raipal7, gc7(3), gv7(3));
 
     std::cout << "Initial gc9: " << gc9.transpose() << std::endl;
@@ -300,7 +299,7 @@ int main(int argc, char* argv[]) {
   const double test4StartTime = world.getWorldTime();
 
   raipal9->getState(gc9Drop, gv9Drop);
-  raipal7.getState(gc7Drop, gv7Drop);
+  raipal7->getState(gc7Drop, gv7Drop);
 
   double previousTime = 0.0;
   double previousRightElbow = gc9Drop(5);
@@ -317,13 +316,13 @@ int main(int argc, char* argv[]) {
   for (size_t t = 0; t<test4Steps; t++){
     test4Timer.tick();
 
-    raipal7.getState(gc7Drop, gv7Drop);
+    raipal7->getState(gc7Drop, gv7Drop);
     applyCorrectedElbowDynamics(raipal7, gc7Drop(3), gv7Drop(3));
 
     server.integrateWorldThreadSafe();
 
     raipal9->getState(gc9Drop, gv9Drop);
-    raipal7.getState(gc7Drop, gv7Drop);
+    raipal7->getState(gc7Drop, gv7Drop);
 
     const double currentTime = world.getWorldTime() - test4StartTime;
     const double rightElbow = gc9Drop(5);
