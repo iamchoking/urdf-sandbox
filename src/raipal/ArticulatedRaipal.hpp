@@ -72,7 +72,7 @@ class ArticulatedRaipal {
   ArticulatedRaipal* operator->() { return this; }
   const ArticulatedRaipal* operator->() const { return this; }
 
-  // Raipal specific methods
+  // Raipal-specific methods
   void updateRaipal(bool forceUpdate = false){
     if(updated_ && !forceUpdate) return;
 
@@ -100,13 +100,15 @@ class ArticulatedRaipal {
       as.pos = as.sign * a;
       as.vel = as.sign * da * gv[as.idx];
       as.acc = as.sign * (dda * gv[as.idx] * gv[as.idx] + da * ga[as.idx]);
-
+      
+      // control variables (joint -> actuator)
       cfb::evalCfb(cfb::fromJoint, as.sign * pTarget[as.idx], as.pTarget);
       as.dTarget = as.sign * da * dTarget[as.idx];
 
-      // TODO: this may change if the gain is set in terms of actuator gain
       as.pGain   = pGain[as.idx] / (da * da);
       as.dGain   = dGain[as.idx] / (da * da);
+
+      // TODO: implement control variable setting (actuator -> joint)
 
       // ------- Joint-side update -------
       maxVelocity_[as.idx]  = maxVelocity_[as.idx-1] / da;
@@ -154,6 +156,15 @@ class ArticulatedRaipal {
       dGain[as.idx] = as.dGain;
     }
   }
+
+  // TODOS
+  // getActuatorGeneralizedForce()
+  // getActuatorFeedForwardGeneralizedForce()
+
+  // cfbMode_ (FROM_JOINT, FROM_ACTUATOR) and corresponding get/setCfbMode()
+  // setActuatorPdGains()
+  // setActuatorPdTarget()
+  // setActuatorGeneralizedForce()
 
   // getters that need special care
   /**
