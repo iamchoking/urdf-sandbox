@@ -12,6 +12,7 @@
 
 double PLAYBACK_SPEED = 1.0;
 double SIM_TIMESTEP = 0.0001;
+bool RANDOM_SEED = true;
 
 size_t TEST1_NUM_POSES = 0;  // random pose test
 double TEST2_DURATION  = 0.0;  // corrected pendulum test
@@ -29,14 +30,24 @@ double getPlaybackTimestep(double simulationTimestep) {
 }
 
 int main(int argc, char* argv[]) {
-  // std::srand(static_cast<unsigned>(std::time(nullptr)));
+  if(RANDOM_SEED){
+    std::srand(static_cast<unsigned>(std::time(nullptr)));
+  }
+  else {
+    std::srand(0);
+  }
 
   // create raisim world
   raisim::World world; // physics world
   raisim::RaisimServer server(&world);
 
   auto raipal9 = world.addArticulatedSystem(std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/raipal_stub-0_R.urdf");
-  auto *raipal7 = new articulatedRaipal(world.addArticulatedSystem(
+  // auto raipal7 = new ArticulatedRaipal(world.addArticulatedSystem(
+  //   std::string(_MAKE_STR(RESOURCE_DIR)) +  "/raipal/urdf/raipal_stub-0_L.urdf")
+  //   ,{3}, {-1.0}
+  // );
+
+  auto raipal7 = ArticulatedRaipal(world.addArticulatedSystem(
     std::string(_MAKE_STR(RESOURCE_DIR)) +  "/raipal/urdf/raipal_stub-0_L.urdf")
     ,{3}, {-1.0}
   );
@@ -61,12 +72,16 @@ int main(int argc, char* argv[]) {
   raipal7->setPdGains(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
   
   server.launchServer();
-  server.focusOn(raipal7->get()); // a discrepancy between raipal9 and raipal7
-  // server.focusOn(raipal9);
+  // If you created `ArticulatedRaipal` as a pointer, use ->get()
+  // for downstream compatibility with raisim::ArticulatedSystem*.
+  // server.focusOn(raipal7->get()); 
+  
+  server.focusOn(raipal9);
   
   /// if you are using an old version of Raisim, you need this line
+  raipal7->updateRaipal();
   world.integrate1();
-  raipal7->updateRaipal(true);
+  raipal7->resetUpdateFlag();
   
   raipal9->setState(Eigen::VectorXd::Zero(9), Eigen::VectorXd::Zero(9));
   raipal7->setState(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
@@ -155,8 +170,9 @@ int main(int argc, char* argv[]) {
   for (size_t t = 0; t<test2Steps; t++){
     test2Timer.tick();
 
+    raipal7->updateRaipal();
     server.integrateWorldThreadSafe();
-    raipal7->updateRaipal(true);
+    raipal7->resetUpdateFlag();
   }
   test2Timer.end();
 
@@ -236,8 +252,9 @@ int main(int argc, char* argv[]) {
   for (size_t t = 0; t<test3Steps; t++){
     test3Timer.tick();
 
+    raipal7->updateRaipal();
     server.integrateWorldThreadSafe();
-    raipal7->updateRaipal(true);
+    raipal7->resetUpdateFlag();
 
     raipal9->getState(gc9Drop, gv9Drop);
     raipal7->getState(gc7Drop, gv7Drop);
@@ -302,8 +319,6 @@ int main(int argc, char* argv[]) {
     gc9(2) = 0.0;
     Eigen::VectorXd gv9 = Eigen::VectorXd::Zero(9);
 
-    rk9::cfbBackward(gc9);
-
     const double elbowLimitMargin = M_PI / 6.0;
     const double rightElbowLower = jointLimits9[5][0];
     const double rightElbowUpper = jointLimits9[5][1];
@@ -351,8 +366,11 @@ int main(int argc, char* argv[]) {
     pGain7(3) = 100.0;
     dGain7(3) = 10.0;
 
+    
     raipal9->setPdGains(pGain9, dGain9);
     raipal7->setPdGains(pGain7, dGain7);
+
+    rk9::cfbBackward(gc9);
     raipal9->setState(gc9, gv9);
     raipal7->setState(gc7, gv7);
 
@@ -369,6 +387,7 @@ int main(int argc, char* argv[]) {
     std::cout << "START!" << std::endl;
 
     Eigen::VectorXd gc9Sine(9), gv9Sine(9), gc7Sine(7), gv7Sine(7);
+    Eigen::VectorXd gc7ActuatorSine(7), gv7ActuatorSine(7);
     Eigen::VectorXd pTarget9 = gc9;
     Eigen::VectorXd dTarget9 = Eigen::VectorXd::Zero(9);
     Eigen::VectorXd pTarget7 = gc7;
@@ -376,6 +395,8 @@ int main(int argc, char* argv[]) {
 
     double maxSineElbowDiff = 0.0;
     double sumAbsSineElbowDiff = 0.0;
+    double maxSineActuatorDiff = 0.0;
+    double sumAbsSineActuatorDiff = 0.0;
     const double test4StartTime = world.getWorldTime();
     const size_t printEverySteps = std::max<size_t>(1, (size_t)(0.1 / world.getTimeStep()));
 
@@ -398,11 +419,13 @@ int main(int argc, char* argv[]) {
       raipal9->setPdTarget(pTarget9, dTarget9);
       raipal7->setPdTarget(pTarget7, dTarget7);
 
+      raipal7->updateRaipal();
       server.integrateWorldThreadSafe();
-      raipal7->updateRaipal(true);
+      raipal7->resetUpdateFlag();
 
       raipal9->getState(gc9Sine, gv9Sine);
       raipal7->getState(gc7Sine, gv7Sine);
+      raipal7->getActuatorState(gc7ActuatorSine, gv7ActuatorSine);
 
       const double rightElbow = gc9Sine(5);
       const double leftElbowMirrored = -gc7Sine(3);
@@ -410,23 +433,35 @@ int main(int argc, char* argv[]) {
       maxSineElbowDiff = std::max(maxSineElbowDiff, std::abs(elbowDiff));
       sumAbsSineElbowDiff += std::abs(elbowDiff);
 
+      const double rightActuator = gc9Sine(3);
+      const double leftActuatorMirrored = -gc7ActuatorSine(3);
+      const double actuatorDiff = rightActuator - leftActuatorMirrored;
+      maxSineActuatorDiff = std::max(maxSineActuatorDiff, std::abs(actuatorDiff));
+      sumAbsSineActuatorDiff += std::abs(actuatorDiff);
+
       if (t % printEverySteps == 0 || t + 1 == test4Steps) {
         std::cout
           << "t: " << currentTime
           << ", freq: " << sineFrequency
           << ", target: " << target
-          << ", right: " << rightElbow
-          << ", left: " << leftElbowMirrored
+          << ", R: " << rightElbow
+          << ", L: " << leftElbowMirrored
           << ", diff: " << elbowDiff * 180.0 / M_PI << " deg"
+          << ", R_ACT: " << rightActuator
+          << ", L_ACT: " << leftActuatorMirrored
+          << ", diff_ACT: " << actuatorDiff * 180.0 / M_PI << " deg"
           << std::endl;
       }
     }
     test4Timer.end();
 
-    std::cout << "Max sine elbow position diff: " << maxSineElbowDiff * 180.0 / M_PI << " deg" << std::endl;
-    std::cout << "Average sine elbow position diff: "
-              << (sumAbsSineElbowDiff / (double)test4Steps) * 180.0 / M_PI
-              << " deg" << std::endl;
+    std::cout << "Elbow    pos. diff: " << 
+      " max: " << maxSineElbowDiff * 180.0 / M_PI << " deg" << 
+      " avg: " << (sumAbsSineElbowDiff / (double)test4Steps) * 180.0 / M_PI << " deg" << std::endl;
+
+    std::cout << "Actuator pos. diff: " << 
+      " max: " << maxSineActuatorDiff * 180.0 / M_PI << " deg" << 
+      " avg: " << (sumAbsSineActuatorDiff / (double)test4Steps) * 180.0 / M_PI << " deg" << std::endl;
   }
   else {
     std::cout << "No sine-wave joint-side test, skipping..." << std::endl;

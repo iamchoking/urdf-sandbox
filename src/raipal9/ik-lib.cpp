@@ -4,6 +4,7 @@
 #define __MAKE_STR(x) #x
 
 #include "raisim/RaisimServer.hpp"
+#include "frame_timer.hpp"
 #include "random_coordinates.hpp"
 
 #include <Eigen/Geometry>
@@ -30,9 +31,19 @@ namespace {
 
 using RaipalKin = rk::RaipalKin;
 
+double PLAYBACK_SPEED = 0.1;
+
 constexpr size_t kNumSteps = 8000;
 std::string kTipFrameName = "RE_tip_fixed";
 const std::array<int, 7> kActuatedIndices{0, 1, 2, 3, 6, 7, 8};
+
+double getPlaybackTimestep(double simulationTimestep) {
+  if (PLAYBACK_SPEED <= 0.0) {
+    std::cout << "PLAYBACK_SPEED must be positive. Falling back to real-time playback." << std::endl;
+    return simulationTimestep;
+  }
+  return simulationTimestep / PLAYBACK_SPEED;
+}
 
 Eigen::VectorXd startingConfig(
   const std::vector<raisim::Vec<2>> &jointLimits,
@@ -71,11 +82,13 @@ int main(int argc, char *argv[]) {
 
   raisim::World world;
   world.setTimeStep(0.001);
+  const double playbackTimestep = getPlaybackTimestep(world.getTimeStep());
+  std::cout << "Playback speed: " << PLAYBACK_SPEED << "x" << std::endl;
 
   raisim::RaisimServer server(&world);
 
   const std::string raipalUrdfDir = std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal9/urdf/";
-  const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-10_R.urdf";
+  const std::string raipalRightUrdf = raipalUrdfDir + "raipal_stub-0_R.urdf";
 
   auto raipalRobot = world.addArticulatedSystem(raipalRightUrdf);
   raipalRobot->setName("raipal_ik_target");
@@ -145,9 +158,10 @@ int main(int argc, char *argv[]) {
   std::cout << "START!" << std::endl;
 
   // ACTUAL LOOP
+  FrameTimer playbackTimer(playbackTimestep, false);
   for (size_t step = 0; step < kNumSteps; ++step) {
     std::cout << "[main] Step " << step << std::endl; //_debug
-    RS_TIMED_LOOP(world.getTimeStep() * 2e6)
+    playbackTimer.tick();
     ++stepsExecuted;
 
     // increment joints
@@ -224,6 +238,7 @@ int main(int argc, char *argv[]) {
     prevGc = currentGc;
     // server.integrateWorldThreadSafe();
   }
+  playbackTimer.end();
 
   if (aborted) {
     std::cout << "[main] IK loop aborted after " << stepsExecuted
@@ -256,4 +271,3 @@ int main(int argc, char *argv[]) {
   server.killServer();
   return 0;
 }
-

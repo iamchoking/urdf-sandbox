@@ -19,18 +19,31 @@
     return robot_->method(std::forward<Args>(args)...);    \
   }
 
-#define RAIPAL_SET_UPDATE(method)                          \
+#define RAIPAL_UPDATE_GET(method)                          \
+  template <typename... Args>                              \
+  decltype(auto) method(Args&&... args) {                  \
+    updateRaipal();                                        \
+    return robot_->method(std::forward<Args>(args)...);    \
+  }                                                        \
+                                                           \
+  template <typename... Args>                              \
+  decltype(auto) method(Args&&... args) const {            \
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();  \
+    return robot_->method(std::forward<Args>(args)...);    \
+  }
+
+#define RAIPAL_SET(method)                                 \
   template <typename... Args>                              \
   void method(Args&&... args) {                            \
     robot_->method(std::forward<Args>(args)...);           \
-    updateRaipal(true);                                    \
+    resetUpdateFlag();                                     \
   }
 
-class articulatedRaipal {
+class ArticulatedRaipal {
 
   public:
   // constructor from existing articulated system
-  explicit articulatedRaipal(
+  explicit ArticulatedRaipal(
     raisim::ArticulatedSystem* robot,
     std::vector<size_t> cfbIndices    = {3  },
     std::vector<double> cfbDirections = {1.0}
@@ -55,6 +68,9 @@ class articulatedRaipal {
 
   operator raisim::ArticulatedSystem*() { return robot_; }
   operator const raisim::ArticulatedSystem*() const { return robot_; }
+
+  ArticulatedRaipal* operator->() { return this; }
+  const ArticulatedRaipal* operator->() const { return this; }
 
   // Raipal specific methods
   void updateRaipal(bool forceUpdate = false){
@@ -113,6 +129,7 @@ class articulatedRaipal {
 
   // actuator-side methods
   void getActuatorState(Eigen::VectorXd &genco, Eigen::VectorXd &genvel){
+    updateRaipal();
     robot_->getState(genco, genvel);
     for(auto& as : actuatorStates_){
       genco[as.idx]  = as.pos;
@@ -121,6 +138,7 @@ class articulatedRaipal {
   }
 
   void getActuatorPdTarget(Eigen::VectorXd &pTarget, Eigen::VectorXd &dTarget){
+    updateRaipal();
     robot_->getPdTarget(pTarget, dTarget);
     for(auto& as : actuatorStates_){
       pTarget[as.idx] = as.pTarget;
@@ -129,6 +147,7 @@ class articulatedRaipal {
   }
 
   void getActuatorPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain){
+    updateRaipal();
     robot_->getPdGains(pGain, dGain);
     for(auto& as : actuatorStates_){
       pGain[as.idx] = as.pGain;
@@ -140,6 +159,7 @@ class articulatedRaipal {
   /**
    * @return the upper joint torque/force limit*/
   [[nodiscard]] const raisim::VecDyn getActuationUpperLimits() const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
     raisim::VecDyn tauUpper;
     tauUpper = maxTorque_;
     return tauUpper;
@@ -148,18 +168,21 @@ class articulatedRaipal {
   /**
    * @return the lower joint torque/force limit*/
   [[nodiscard]] const raisim::VecDyn getActuationLowerLimits() const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
     raisim::VecDyn tauLower;
     tauLower = minTorque_;
     return tauLower;
   }
 
   [[nodiscard]] const raisim::VecDyn getFeedForwardGeneralizedForce() const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
     raisim::VecDyn tauFF;
     tauFF = tauFF_;
     return tauFF;
   }
 
   [[nodiscard]] raisim::VecDyn getGeneralizedForce() const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
     Eigen::VectorXd gf = robot_->getGeneralizedForce().e() - tauCFB_;
     raisim::VecDyn genForce;
     genForce = gf;
@@ -169,146 +192,146 @@ class articulatedRaipal {
   // BOOKMARK: start coding setters
   // setters that need special care
 
-  // RAIPAL_SET_UPDATE(setRotorInertia)
+  // RAIPAL_SET(setRotorInertia)
   void setRotorInertia(const raisim::VecDyn &rotorInertia) {
     rotorInertia_ = rotorInertia;
-    updateRaipal(true);
+    resetUpdateFlag();
   }
 
-  // RAIPAL_SET_UPDATE(setActuationLimits)
+  // RAIPAL_SET(setActuationLimits)
   void setActuationLimits(const Eigen::VectorXd &upper, const Eigen::VectorXd &lower) {
     maxTorque_ = upper;
     minTorque_ = lower;
-    updateRaipal(true);
+    resetUpdateFlag();
   }
 
-  // RAIPAL_SET_UPDATE(setJointVelocityLimits)
+  // RAIPAL_SET(setJointVelocityLimits)
   void setJointVelocityLimits(const Eigen::VectorXd &velLimits) {
     maxVelocity_ = velLimits;
-    updateRaipal(true);
+    resetUpdateFlag();
   }
 
-  // RAIPAL_SET_UPDATE(setGeneralizedForce)      // tauFF_
+  // RAIPAL_SET(setGeneralizedForce)      // tauFF_
   void setGeneralizedForce(const raisim::VecDyn &tau) { 
     tauFF_ = tau.e();
     tauCFB_.setZero();
     robot_->setGeneralizedForce(tauFF_);
-    updateRaipal(true);
+    resetUpdateFlag();
   }
 
   void setGeneralizedForce(const Eigen::VectorXd &tau) { 
     tauFF_ = tau;
     tauCFB_.setZero();
     robot_->setGeneralizedForce(tauFF_);
-    updateRaipal(true);
+    resetUpdateFlag();
   }
 
   // setters that require updates
-  RAIPAL_SET_UPDATE(setState)                 // gc, gv
-  RAIPAL_SET_UPDATE(setGeneralizedCoordinate) // gc 
-  RAIPAL_SET_UPDATE(setGeneralizedVelocity)   // gv
-  RAIPAL_SET_UPDATE(setPdTarget)              // pTarget, dTarget
-  RAIPAL_SET_UPDATE(setPTarget)               // pTarget
-  RAIPAL_SET_UPDATE(setDTarget)               // dTarget
-  RAIPAL_SET_UPDATE(setPdGains)               // pGain, dGain
-  RAIPAL_SET_UPDATE(setPGains)                // pGain
-  RAIPAL_SET_UPDATE(setDGains)                // dGain
+  RAIPAL_SET(setState)                 // gc, gv
+  RAIPAL_SET(setGeneralizedCoordinate) // gc 
+  RAIPAL_SET(setGeneralizedVelocity)   // gv
+  RAIPAL_SET(setPdTarget)              // pTarget, dTarget
+  RAIPAL_SET(setPTarget)               // pTarget
+  RAIPAL_SET(setDTarget)               // dTarget
+  RAIPAL_SET(setPdGains)               // pGain, dGain
+  RAIPAL_SET(setPGains)                // pGain
+  RAIPAL_SET(setDGains)                // dGain
 
   // forwarded to ArticluatedSystem (no need for wrapper intervention)
   RAIPAL_FORWARD(isSecondOrderOrHigher)
-  RAIPAL_FORWARD(getGeneralizedCoordinate)
-  RAIPAL_FORWARD(getGeneralizedVelocity)
-  RAIPAL_FORWARD(getGeneralizedAcceleration)
-  RAIPAL_FORWARD(getBaseOrientation)
-  RAIPAL_FORWARD(getBasePosition)
+  RAIPAL_UPDATE_GET(getGeneralizedCoordinate)
+  RAIPAL_UPDATE_GET(getGeneralizedVelocity)
+  RAIPAL_UPDATE_GET(getGeneralizedAcceleration)
+  RAIPAL_UPDATE_GET(getBaseOrientation)
+  RAIPAL_UPDATE_GET(getBasePosition)
   RAIPAL_FORWARD(updateKinematics)
-  RAIPAL_FORWARD(getState)
-  RAIPAL_FORWARD(getMassMatrix)
-  RAIPAL_FORWARD(getNonlinearities)
-  RAIPAL_FORWARD(getInverseMassMatrix)
-  RAIPAL_FORWARD(getCompositeCOM)
-  RAIPAL_FORWARD(getCOM)
-  RAIPAL_FORWARD(getCompositeInertia)
-  RAIPAL_FORWARD(getCompositeMass)
-  RAIPAL_FORWARD(getLinearMomentum)
-  RAIPAL_FORWARD(getGeneralizedMomentum)
-  RAIPAL_FORWARD(getEnergy)
-  RAIPAL_FORWARD(getKineticEnergy)
-  RAIPAL_FORWARD(getPotentialEnergy)
-  RAIPAL_FORWARD(getAngularMomentum)
+  RAIPAL_UPDATE_GET(getState)
+  RAIPAL_UPDATE_GET(getMassMatrix)
+  RAIPAL_UPDATE_GET(getNonlinearities)
+  RAIPAL_UPDATE_GET(getInverseMassMatrix)
+  RAIPAL_UPDATE_GET(getCompositeCOM)
+  RAIPAL_UPDATE_GET(getCOM)
+  RAIPAL_UPDATE_GET(getCompositeInertia)
+  RAIPAL_UPDATE_GET(getCompositeMass)
+  RAIPAL_UPDATE_GET(getLinearMomentum)
+  RAIPAL_UPDATE_GET(getGeneralizedMomentum)
+  RAIPAL_UPDATE_GET(getEnergy)
+  RAIPAL_UPDATE_GET(getKineticEnergy)
+  RAIPAL_UPDATE_GET(getPotentialEnergy)
+  RAIPAL_UPDATE_GET(getAngularMomentum)
   RAIPAL_FORWARD(printOutBodyNamesInOrder)
   RAIPAL_FORWARD(printOutMovableJointNamesInOrder)
   RAIPAL_FORWARD(printOutFrameNamesInOrder)
-  RAIPAL_FORWARD(getMovableJointNames)
-  RAIPAL_FORWARD(getGeneralizedVelocityIndex)
-  RAIPAL_FORWARD(getPosition)
-  RAIPAL_FORWARD(getFrameByName)
-  RAIPAL_FORWARD(getFrameByLinkName)
-  RAIPAL_FORWARD(getFrameIdxByLinkName)
-  RAIPAL_FORWARD(getFrameByIdx)
-  RAIPAL_FORWARD(getFrameIdxByName)
-  RAIPAL_FORWARD(getFrames)
-  RAIPAL_FORWARD(getFramePosition)
-  RAIPAL_FORWARD(getPositionInFrame)
-  RAIPAL_FORWARD(getFrameOrientation)
-  RAIPAL_FORWARD(getFrameVelocity)
-  RAIPAL_FORWARD(getFrameAngularVelocity)
-  RAIPAL_FORWARD(getFrameAcceleration)
-  RAIPAL_FORWARD(getPositionInBodyCoordinate)
-  RAIPAL_FORWARD(getOrientation)
-  RAIPAL_FORWARD(getVelocity)
-  RAIPAL_FORWARD(getAngularVelocity)
-  RAIPAL_FORWARD(getSparseJacobian)
-  RAIPAL_FORWARD(getSparseRotationalJacobian)
-  RAIPAL_FORWARD(getTimeDerivativeOfSparseJacobian)
-  RAIPAL_FORWARD(getTimeDerivativeOfSparseRotationalJacobian)
-  RAIPAL_FORWARD(getDenseJacobian)
-  RAIPAL_FORWARD(getDenseRotationalJacobian)
-  RAIPAL_FORWARD(getDenseFrameJacobian)
-  RAIPAL_FORWARD(getDenseFrameRotationalJacobian)
-  RAIPAL_FORWARD(getBodyIdx)
-  RAIPAL_FORWARD(getDOF)
-  RAIPAL_FORWARD(getGeneralizedVelocityDim)
-  RAIPAL_FORWARD(getGeneralizedCoordinateDim)
-  RAIPAL_FORWARD(getBodyPose)
-  RAIPAL_FORWARD(getBodyPosition)
-  RAIPAL_FORWARD(getBodyOrientation)
-  RAIPAL_FORWARD(getJointPos_P)
-  RAIPAL_FORWARD(getJointOrientation_P)
-  RAIPAL_FORWARD(getJointAxis_P)
-  RAIPAL_FORWARD(getJointAxis)
-  RAIPAL_FORWARD(getMass)
-  RAIPAL_FORWARD(getInertia)
-  RAIPAL_FORWARD(getBodyCOM_B)
-  RAIPAL_FORWARD(getBodyCOM_W)
-  RAIPAL_FORWARD(getCollisionBodies)
-  RAIPAL_FORWARD(getCollisionBody)
+  RAIPAL_UPDATE_GET(getMovableJointNames)
+  RAIPAL_UPDATE_GET(getGeneralizedVelocityIndex)
+  RAIPAL_UPDATE_GET(getPosition)
+  RAIPAL_UPDATE_GET(getFrameByName)
+  RAIPAL_UPDATE_GET(getFrameByLinkName)
+  RAIPAL_UPDATE_GET(getFrameIdxByLinkName)
+  RAIPAL_UPDATE_GET(getFrameByIdx)
+  RAIPAL_UPDATE_GET(getFrameIdxByName)
+  RAIPAL_UPDATE_GET(getFrames)
+  RAIPAL_UPDATE_GET(getFramePosition)
+  RAIPAL_UPDATE_GET(getPositionInFrame)
+  RAIPAL_UPDATE_GET(getFrameOrientation)
+  RAIPAL_UPDATE_GET(getFrameVelocity)
+  RAIPAL_UPDATE_GET(getFrameAngularVelocity)
+  RAIPAL_UPDATE_GET(getFrameAcceleration)
+  RAIPAL_UPDATE_GET(getPositionInBodyCoordinate)
+  RAIPAL_UPDATE_GET(getOrientation)
+  RAIPAL_UPDATE_GET(getVelocity)
+  RAIPAL_UPDATE_GET(getAngularVelocity)
+  RAIPAL_UPDATE_GET(getSparseJacobian)
+  RAIPAL_UPDATE_GET(getSparseRotationalJacobian)
+  RAIPAL_UPDATE_GET(getTimeDerivativeOfSparseJacobian)
+  RAIPAL_UPDATE_GET(getTimeDerivativeOfSparseRotationalJacobian)
+  RAIPAL_UPDATE_GET(getDenseJacobian)
+  RAIPAL_UPDATE_GET(getDenseRotationalJacobian)
+  RAIPAL_UPDATE_GET(getDenseFrameJacobian)
+  RAIPAL_UPDATE_GET(getDenseFrameRotationalJacobian)
+  RAIPAL_UPDATE_GET(getBodyIdx)
+  RAIPAL_UPDATE_GET(getDOF)
+  RAIPAL_UPDATE_GET(getGeneralizedVelocityDim)
+  RAIPAL_UPDATE_GET(getGeneralizedCoordinateDim)
+  RAIPAL_UPDATE_GET(getBodyPose)
+  RAIPAL_UPDATE_GET(getBodyPosition)
+  RAIPAL_UPDATE_GET(getBodyOrientation)
+  RAIPAL_UPDATE_GET(getJointPos_P)
+  RAIPAL_UPDATE_GET(getJointOrientation_P)
+  RAIPAL_UPDATE_GET(getJointAxis_P)
+  RAIPAL_UPDATE_GET(getJointAxis)
+  RAIPAL_UPDATE_GET(getMass)
+  RAIPAL_UPDATE_GET(getInertia)
+  RAIPAL_UPDATE_GET(getBodyCOM_B)
+  RAIPAL_UPDATE_GET(getBodyCOM_W)
+  RAIPAL_UPDATE_GET(getCollisionBodies)
+  RAIPAL_UPDATE_GET(getCollisionBody)
   RAIPAL_FORWARD(updateMassInfo)
   RAIPAL_FORWARD(setMass)
-  RAIPAL_FORWARD(getTotalMass)
+  RAIPAL_UPDATE_GET(getTotalMass)
   RAIPAL_FORWARD(setExternalForce)
   RAIPAL_FORWARD(setExternalTorque)
   RAIPAL_FORWARD(setExternalTorqueInBodyFrame)
-  RAIPAL_FORWARD(getContactPointVel)
+  RAIPAL_UPDATE_GET(getContactPointVel)
   RAIPAL_FORWARD(setControlMode)
-  RAIPAL_FORWARD(getControlMode)
-  RAIPAL_FORWARD(getPdTarget)
-  RAIPAL_FORWARD(getPdGains)
+  RAIPAL_UPDATE_GET(getControlMode)
+  RAIPAL_UPDATE_GET(getPdTarget)
+  RAIPAL_UPDATE_GET(getPdGains)
   RAIPAL_FORWARD(setJointDamping)
   RAIPAL_FORWARD(computeSparseInverse)
   RAIPAL_FORWARD(massMatrixVecMul)
   RAIPAL_FORWARD(ignoreCollisionBetween)
-  RAIPAL_FORWARD(getOptions)
-  RAIPAL_FORWARD(getBodyNames)
-  RAIPAL_FORWARD(getVisOb)
-  RAIPAL_FORWARD(getVisColOb)
-  RAIPAL_FORWARD(getVisObPose)
-  RAIPAL_FORWARD(getVisColObPose)
-  RAIPAL_FORWARD(getResourceDir)
-  RAIPAL_FORWARD(getRobotDescriptionfFileName)
-  RAIPAL_FORWARD(getRobotDescriptionfTopDirName)
-  RAIPAL_FORWARD(getRobotDescriptionFullPath)
-  RAIPAL_FORWARD(getRobotDescription)
+  RAIPAL_UPDATE_GET(getOptions)
+  RAIPAL_UPDATE_GET(getBodyNames)
+  RAIPAL_UPDATE_GET(getVisOb)
+  RAIPAL_UPDATE_GET(getVisColOb)
+  RAIPAL_UPDATE_GET(getVisObPose)
+  RAIPAL_UPDATE_GET(getVisColObPose)
+  RAIPAL_UPDATE_GET(getResourceDir)
+  RAIPAL_UPDATE_GET(getRobotDescriptionfFileName)
+  RAIPAL_UPDATE_GET(getRobotDescriptionfTopDirName)
+  RAIPAL_UPDATE_GET(getRobotDescriptionFullPath)
+  RAIPAL_UPDATE_GET(getRobotDescription)
   RAIPAL_FORWARD(exportRobotDescriptionToURDF)
   RAIPAL_FORWARD(setBasePos_e)
   RAIPAL_FORWARD(setBaseOrientation_e)
@@ -319,51 +342,54 @@ class articulatedRaipal {
   RAIPAL_FORWARD(setCollisionObjectShapeParameters)
   RAIPAL_FORWARD(setCollisionObjectPositionOffset)
   RAIPAL_FORWARD(setCollisionObjectOrientationOffset)
-  RAIPAL_FORWARD(getRotorInertia)
-  RAIPAL_FORWARD(getJointType)
-  RAIPAL_FORWARD(getNumberOfJoints)
-  RAIPAL_FORWARD(getJoint)
-  RAIPAL_FORWARD(getLink)
-  RAIPAL_FORWARD(getMappingFromBodyIndexToGeneralizedVelocityIndex)
-  RAIPAL_FORWARD(getMappingFromBodyIndexToGeneralizedCoordinateIndex)
-  RAIPAL_FORWARD(getObjectType)
-  RAIPAL_FORWARD(getBodyType)
+  RAIPAL_UPDATE_GET(getRotorInertia)
+  RAIPAL_UPDATE_GET(getJointType)
+  RAIPAL_UPDATE_GET(getNumberOfJoints)
+  RAIPAL_UPDATE_GET(getJoint)
+  RAIPAL_UPDATE_GET(getLink)
+  RAIPAL_UPDATE_GET(getMappingFromBodyIndexToGeneralizedVelocityIndex)
+  RAIPAL_UPDATE_GET(getMappingFromBodyIndexToGeneralizedCoordinateIndex)
+  RAIPAL_UPDATE_GET(getObjectType)
+  RAIPAL_UPDATE_GET(getBodyType)
   RAIPAL_FORWARD(setIntegrationScheme)
-  RAIPAL_FORWARD(getJointLimitViolations)
+  RAIPAL_UPDATE_GET(getJointLimitViolations)
   RAIPAL_FORWARD(setJointLimits)
-  RAIPAL_FORWARD(getJointLimits)
-  RAIPAL_FORWARD(getJointVelocityLimits)
+  RAIPAL_UPDATE_GET(getJointLimits)
+  RAIPAL_UPDATE_GET(getJointVelocityLimits)
   RAIPAL_FORWARD(clearExternalForcesAndTorques)
   RAIPAL_FORWARD(addSpring)
-  RAIPAL_FORWARD(getSprings)
-  RAIPAL_FORWARD(getParentVector)
-  RAIPAL_FORWARD(getSensorSet)
-  RAIPAL_FORWARD(getSensorSets)
+  RAIPAL_UPDATE_GET(getSprings)
+  RAIPAL_UPDATE_GET(getParentVector)
+  RAIPAL_UPDATE_GET(getSensorSet)
+  RAIPAL_UPDATE_GET(getSensorSets)
   RAIPAL_FORWARD(addConstraints)
   RAIPAL_FORWARD(initializeConstraints)
   RAIPAL_FORWARD(setComputeInverseDynamics)
-  RAIPAL_FORWARD(getComputeInverseDynamics)
-  RAIPAL_FORWARD(getForceAtJointInWorldFrame)
-  RAIPAL_FORWARD(getTorqueAtJointInWorldFrame)
-  RAIPAL_FORWARD(getAllowedNumberOfInternalContactsBetweenTwoBodies)
+  RAIPAL_UPDATE_GET(getComputeInverseDynamics)
+  RAIPAL_UPDATE_GET(getForceAtJointInWorldFrame)
+  RAIPAL_UPDATE_GET(getTorqueAtJointInWorldFrame)
+  RAIPAL_UPDATE_GET(getAllowedNumberOfInternalContactsBetweenTwoBodies)
   RAIPAL_FORWARD(setAllowedNumberOfInternalContactsBetweenTwoBodies)
   RAIPAL_FORWARD(articulatedBodyAlgorithm)
-  RAIPAL_FORWARD(getMinvJT)
-  RAIPAL_FORWARD(getj_MinvJT_T1D)
-  RAIPAL_FORWARD(getUdot)
-  RAIPAL_FORWARD(getFullDelassusAndTauStar)
+  RAIPAL_UPDATE_GET(getMinvJT)
+  RAIPAL_UPDATE_GET(getj_MinvJT_T1D)
+  RAIPAL_UPDATE_GET(getUdot)
+  RAIPAL_UPDATE_GET(getFullDelassusAndTauStar)
   RAIPAL_FORWARD(appendJointLimits)
 
   void setGeneralizedCoordinate(std::initializer_list<double> jointState) {
     robot_->setGeneralizedCoordinate(jointState);
+    resetUpdateFlag();
   }
 
   void setGeneralizedVelocity(std::initializer_list<double> jointVelocity) {
     robot_->setGeneralizedVelocity(jointVelocity);
+    resetUpdateFlag();
   }
 
   void setGeneralizedForce(std::initializer_list<double> tau) {
     robot_->setGeneralizedForce(tau);
+    resetUpdateFlag();
   }
 
   static void convertSparseJacobianToDense(
@@ -408,4 +434,5 @@ private:
 };
 
 #undef RAIPAL_FORWARD
-#undef RAIPAL_SET_UPDATE
+#undef RAIPAL_UPDATE_GET
+#undef RAIPAL_SET
