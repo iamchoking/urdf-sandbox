@@ -25,7 +25,7 @@ void applyCorrectedElbowDynamics(
     double elbowPosition,
     double elbowVelocity) {
   double actuatorPosition, gearRatio, gearRatioDerivative;
-  cfb::evalCfb(cfb::fromJoint, -elbowPosition, actuatorPosition, gearRatio, gearRatioDerivative);
+  cfb::evalCfb(cfb::fromJoint, elbowPosition, -1, actuatorPosition, gearRatio, gearRatioDerivative);
 
   auto rotorInertia = raipal7->getRotorInertia();
 
@@ -40,7 +40,7 @@ void applyCorrectedElbowDynamics(
   // qa = f(-q), so the reflected velocity-dependent term is
   // I * (dqa/dq) * (d2qa/dq2) * qdot^2 = -I * f'(-q) * f''(-q) * qdot^2.
   Eigen::VectorXd tau7 = Eigen::VectorXd::Zero(7);
-  tau7(3) = actuatorInertia * gearRatio * gearRatioDerivative * elbowVelocity * elbowVelocity;
+  tau7(3) = - actuatorInertia * gearRatio * gearRatioDerivative * elbowVelocity * elbowVelocity;
   // tau7(3) = 0;
   raipal7->setGeneralizedForce(tau7); // TODO: sign check
 }
@@ -214,13 +214,6 @@ int main(int argc, char* argv[]) {
   else {
     std::cout << "No corrected pendulum test, skipping..." << std::endl;
   }
-
-  // BOOKMARK: start correction
-  // was going to: patch raipal_kinematics to add a method for gear ratio.
-
-  // things to correct:
-  // rotor_inertia
-  // 
 
   Eigen::VectorXd gc7(7), gv7(7);
 

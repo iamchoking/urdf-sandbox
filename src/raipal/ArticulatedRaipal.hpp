@@ -11,63 +11,68 @@
 #define RAIPAL_FORWARD(method)                             \
   template <typename... Args>                              \
   decltype(auto) method(Args&&... args) {                  \
-    return robot_->method(std::forward<Args>(args)...);    \
+    return articulated_->method(std::forward<Args>(args)...);    \
   }                                                        \
                                                            \
   template <typename... Args>                              \
   decltype(auto) method(Args&&... args) const {            \
-    return robot_->method(std::forward<Args>(args)...);    \
+    return articulated_->method(std::forward<Args>(args)...);    \
   }
 
 #define RAIPAL_UPDATE_GET(method)                          \
   template <typename... Args>                              \
   decltype(auto) method(Args&&... args) {                  \
     updateRaipal();                                        \
-    return robot_->method(std::forward<Args>(args)...);    \
+    return articulated_->method(std::forward<Args>(args)...);    \
   }                                                        \
                                                            \
   template <typename... Args>                              \
   decltype(auto) method(Args&&... args) const {            \
     const_cast<ArticulatedRaipal*>(this)->updateRaipal();  \
-    return robot_->method(std::forward<Args>(args)...);    \
+    return articulated_->method(std::forward<Args>(args)...);    \
   }
 
 #define RAIPAL_SET(method)                                 \
   template <typename... Args>                              \
   void method(Args&&... args) {                            \
-    robot_->method(std::forward<Args>(args)...);           \
+    articulated_->method(std::forward<Args>(args)...);           \
     resetUpdateFlag();                                     \
   }
 
 class ArticulatedRaipal {
-
   public:
+
+  enum class CfbTargetMode {
+    FROM_JOINT,    // set target and gains in terms of joint space (actuator-side pd gains change every update)
+    FROM_ACTUATOR  // set target and gains in terms of actuator space (joint-side pd gains change every update)
+  };
+
   // constructor from existing articulated system
   explicit ArticulatedRaipal(
     raisim::ArticulatedSystem* robot,
     std::vector<size_t> cfbIndices    = {3  },
-    std::vector<double> cfbDirections = {1.0}
+    std::vector<int> cfbDirections = {1}
   ): 
-    robot_(robot),
-    rotorInertia_(robot_->getRotorInertia()),
-    maxTorque_(robot_->getActuationUpperLimits().e()),
-    minTorque_(robot_->getActuationLowerLimits().e()),
-    maxVelocity_(robot_->getJointVelocityLimits())
+    articulated_(robot),
+    rotorInertia_(articulated_->getRotorInertia()),
+    maxTorque_(articulated_->getActuationUpperLimits().e()),
+    minTorque_(articulated_->getActuationLowerLimits().e()),
+    maxVelocity_(articulated_->getJointVelocityLimits())
   {
-    dof_ = robot_->getDOF();
+    dof_ = articulated_->getDOF();
     for(size_t i = 0; i < cfbIndices.size(); i++){
       actuatorStates_.push_back({cfbIndices[i], cfbDirections[i]});
     }
-    tauFF_ = robot_->getFeedForwardGeneralizedForce().e();
+    tauFF_ = articulated_->getFeedForwardGeneralizedForce().e();
     tauCFB_.setZero(tauFF_.size());
   }
 
   // casting / conversion for upstream compatiblity
-  raisim::ArticulatedSystem* get() { return robot_; }
-  const raisim::ArticulatedSystem* get() const { return robot_; }
+  raisim::ArticulatedSystem* get() { return articulated_; }
+  const raisim::ArticulatedSystem* get() const { return articulated_; }
 
-  operator raisim::ArticulatedSystem*() { return robot_; }
-  operator const raisim::ArticulatedSystem*() const { return robot_; }
+  operator raisim::ArticulatedSystem*() { return articulated_; }
+  operator const raisim::ArticulatedSystem*() const { return articulated_; }
 
   ArticulatedRaipal* operator->() { return this; }
   const ArticulatedRaipal* operator->() const { return this; }
@@ -77,62 +82,115 @@ class ArticulatedRaipal {
     if(updated_ && !forceUpdate) return;
 
     Eigen::VectorXd gc,gv,ga;
-    robot_->getState(gc, gv);
-    ga = robot_->getGeneralizedAcceleration().e();
+    articulated_->getState(gc, gv);
+    ga = articulated_->getGeneralizedAcceleration().e();
 
-    Eigen::VectorXd pTarget(robot_->getGeneralizedCoordinateDim());
-    Eigen::VectorXd dTarget(robot_->getDOF());
-    Eigen::VectorXd pGain(robot_->getDOF());
-    Eigen::VectorXd dGain(robot_->getDOF());
-    robot_->getPdTarget(pTarget, dTarget);
-    robot_->getPdGains(pGain, dGain);
+    Eigen::VectorXd pTarget(articulated_->getGeneralizedCoordinateDim());
+    Eigen::VectorXd dTarget(articulated_->getDOF());
+    Eigen::VectorXd pGain(articulated_->getDOF());
+    Eigen::VectorXd dGain(articulated_->getDOF());
+    articulated_->getPdTarget(pTarget, dTarget);
+    articulated_->getPdGains(pGain, dGain);
 
-    tauFF_ = robot_->getFeedForwardGeneralizedForce().e() - tauCFB_;
+    tauFF_ = articulated_->getFeedForwardGeneralizedForce().e() - tauCFB_;
     tauCFB_.setZero();
 
     for(auto& as : actuatorStates_){
       // CFB solution
       double a, da, dda;
-      cfb::evalCfb(cfb::fromJoint, as.sign * gc[as.idx], a, da, dda);
+      cfb::evalCfb(cfb::fromJoint, gc[as.idx], as.sign, a, da, dda);
 
       // ------- Actuator-side update -------
       // kinematic state
-      as.pos = as.sign * a;
-      as.vel = as.sign * da * gv[as.idx];
-      as.acc = as.sign * (dda * gv[as.idx] * gv[as.idx] + da * ga[as.idx]);
+      as.pos = a;
+      as.vel = da * gv[as.idx];
+      as.acc = (dda * gv[as.idx] * gv[as.idx]) + da * ga[as.idx];
       
-      // control variables (joint -> actuator)
-      cfb::evalCfb(cfb::fromJoint, as.sign * pTarget[as.idx], as.pTarget);
-      as.dTarget = as.sign * da * dTarget[as.idx];
+      if(cfbMode_ == CfbTargetMode::FROM_JOINT){
+        // control variables (joint -> actuator)
+        cfb::evalCfb(cfb::fromJoint, pTarget[as.idx], as.sign, as.pTarget);
+        as.dTarget = da * dTarget[as.idx];
 
-      as.pGain   = pGain[as.idx] / (da * da);
-      as.dGain   = dGain[as.idx] / (da * da);
+      }
 
-      // TODO: implement control variable setting (actuator -> joint)
+      else if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){
+        // control variables (joint -> actuator)
+
+        cfb::evalCfb(cfb::fromActuator, as.pTarget, as.sign, pTarget(as.idx));
+        dTarget(as.idx) = as.dTarget / da;
+ 
+      }
+
+    
+      // gain setting for torque-equivalence
+      double jointPerror = pTarget[as.idx] - gc[as.idx];
+      double actPerror = as.pTarget - as.pos;
+      if(std::abs(jointPerror) > 1e-6 && std::abs(actPerror) > 1e-6){
+        // joint-error * joint-gain = actuator-error * actuator-gain * da
+
+        // => joint-gain = actuator-error * actuator-gain * da / joint-error
+        if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){pGain[as.idx] = as.pGain * da * actPerror / jointPerror;}
+
+        // => actuator-gain = joint-gain * joint-error *  / (actuator-error * da)
+        else{as.pGain = pGain[as.idx] * jointPerror / (actPerror * da);}
+      }
+      else{
+        // if the error is too small, use naive gain mapping
+        if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){pGain[as.idx] = as.pGain * (da * da);}
+        else{as.pGain   = pGain[as.idx] / (da * da);}
+      }
+
+      double jointDerror = dTarget[as.idx] - gv[as.idx];
+      double actDerror = as.dTarget - as.vel;
+      if(std::abs(jointDerror) > 1e-6 && std::abs(actDerror) > 1e-6){
+        // joint-error * joint-gain = actuator-error * actuator-gain * da
+        // => joint-gain = actuator-error * actuator-gain * da / joint-error
+        if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){dGain[as.idx] = as.dGain * da * actDerror / jointDerror;}
+
+        // => actuator-gain = joint-gain * joint-error *  / (actuator-error * da)
+        else{as.dGain = dGain[as.idx] * jointDerror / (actDerror * da);}        
+      }
+      else{
+        // if the error is too small, use naive gain mapping
+        if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){dGain[as.idx] = as.dGain * (da * da);}
+        else{as.dGain   = dGain[as.idx] / (da * da);}
+      }
+
+      // [IMPORTANT] CFB-induced residual torque
+      tauCFB_[as.idx] = - (rotorInertia_[as.idx-1] + cfb::actuatorInertia) * da * dda * gv[as.idx] * gv[as.idx];
 
       // ------- Joint-side update -------
       maxVelocity_[as.idx]  = maxVelocity_[as.idx-1] / da;
       rotorInertia_[as.idx] = (rotorInertia_[as.idx-1] + cfb::actuatorInertia) * da * da;
 
-      tauCFB_[as.idx] = -as.sign * (rotorInertia_[as.idx-1] + cfb::actuatorInertia) * da * dda * gv[as.idx] * gv[as.idx];
       maxTorque_[as.idx]    = maxTorque_[as.idx-1] * da;
       minTorque_[as.idx]    = minTorque_[as.idx-1] * da;
     }
 
-    robot_->setJointVelocityLimits(maxVelocity_);
-    robot_->setActuationLimits(maxTorque_ + tauCFB_, minTorque_ + tauCFB_);
-    robot_->setRotorInertia(rotorInertia_);
-    robot_->setGeneralizedForce(tauFF_ + tauCFB_);
+    if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){
+      articulated_->setPdTarget(pTarget, dTarget);
+      articulated_->setPdGains(pGain,dGain);
+    }
+
+    articulated_->setJointVelocityLimits(maxVelocity_);
+    articulated_->setActuationLimits(maxTorque_ + tauCFB_, minTorque_ + tauCFB_);
+    articulated_->setRotorInertia(rotorInertia_);
+    articulated_->setGeneralizedForce(tauFF_ + tauCFB_);
 
     updated_ = true;
   }
 
   void resetUpdateFlag(bool updated = false) { updated_ = updated; }
 
+  // mode control
+  void setCfbTargetMode(CfbTargetMode mode) { cfbMode_ = mode; }
+  void setCfbTargetFromJoint() { cfbMode_ = CfbTargetMode::FROM_JOINT; }
+  void setCfbTargetFromActuator() { cfbMode_ = CfbTargetMode::FROM_ACTUATOR; }
+
   // actuator-side methods
   void getActuatorState(Eigen::VectorXd &genco, Eigen::VectorXd &genvel){
     updateRaipal();
-    robot_->getState(genco, genvel);
+    articulated_->getState(genco, genvel);
     for(auto& as : actuatorStates_){
       genco[as.idx]  = as.pos;
       genvel[as.idx] = as.vel;
@@ -141,7 +199,7 @@ class ArticulatedRaipal {
 
   void getActuatorPdTarget(Eigen::VectorXd &pTarget, Eigen::VectorXd &dTarget){
     updateRaipal();
-    robot_->getPdTarget(pTarget, dTarget);
+    articulated_->getPdTarget(pTarget, dTarget);
     for(auto& as : actuatorStates_){
       pTarget[as.idx] = as.pTarget;
       dTarget[as.idx] = as.dTarget;
@@ -150,20 +208,59 @@ class ArticulatedRaipal {
 
   void getActuatorPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain){
     updateRaipal();
-    robot_->getPdGains(pGain, dGain);
+    articulated_->getPdGains(pGain, dGain);
     for(auto& as : actuatorStates_){
       pGain[as.idx] = as.pGain;
       dGain[as.idx] = as.dGain;
     }
   }
 
+  void setActuatorPdTarget(const Eigen::VectorXd &pTarget, const Eigen::VectorXd &dTarget){\
+    RSFATAL_IF(cfbMode_ != CfbTargetMode::FROM_ACTUATOR, "setActuatorPdTarget can only be used when CFB target mode is set to FROM_ACTUATOR");
+    articulated_->setPdTarget(pTarget, dTarget);
+    for(auto& as/*  */ : actuatorStates_){
+      as.pTarget = pTarget[as.idx];
+      as.dTarget = dTarget[as.idx];
+    }
+    resetUpdateFlag();
+  }
+
+  void setActuatorPdGains(const Eigen::VectorXd &pGain, const Eigen::VectorXd &dGain){
+    RSFATAL_IF(cfbMode_ != CfbTargetMode::FROM_ACTUATOR, "setActuatorPdGains can only be used when CFB target mode is set to FROM_ACTUATOR");
+    articulated_->setPdGains(pGain, dGain);
+    for(auto& as : actuatorStates_){
+      as.pGain = pGain[as.idx];
+      as.dGain = dGain[as.idx];
+    }
+    resetUpdateFlag();
+  }
+
   // TODOS
   // getActuatorGeneralizedForce()
   // getActuatorFeedForwardGeneralizedForce()
 
+  // cfbMode_-aware getters and setters for control variables
+  inline void setCurrentPdTarget(const Eigen::VectorXd &pTarget, const Eigen::VectorXd &dTarget){
+    if(cfbMode_ == CfbTargetMode::FROM_JOINT){setPdTarget(pTarget, dTarget);}
+    else if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){setActuatorPdTarget(pTarget, dTarget);}
+  }
+
+  inline void setCurrentPdGains(const Eigen::VectorXd &pGain, const Eigen::VectorXd &dGain){
+    if(cfbMode_ == CfbTargetMode::FROM_JOINT){setPdGains(pGain, dGain);}
+    else if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){setActuatorPdGains(pGain, dGain);}
+  }
+
+  inline void getCurrentPdTarget(Eigen::VectorXd &pTarget, Eigen::VectorXd &dTarget){
+    if(cfbMode_ == CfbTargetMode::FROM_JOINT){getPdTarget(pTarget, dTarget);}
+    else if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){getActuatorPdTarget(pTarget, dTarget);}
+  }
+
+  inline void getCurrentPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain){
+    if(cfbMode_ == CfbTargetMode::FROM_JOINT){getPdGains(pGain, dGain);}
+    else if(cfbMode_ == CfbTargetMode::FROM_ACTUATOR){getActuatorPdGains(pGain, dGain);}
+  }
+
   // cfbMode_ (FROM_JOINT, FROM_ACTUATOR) and corresponding get/setCfbMode()
-  // setActuatorPdGains()
-  // setActuatorPdTarget()
   // setActuatorGeneralizedForce()
 
   // getters that need special care
@@ -194,14 +291,43 @@ class ArticulatedRaipal {
 
   [[nodiscard]] raisim::VecDyn getGeneralizedForce() const {
     const_cast<ArticulatedRaipal*>(this)->updateRaipal();
-    Eigen::VectorXd gf = robot_->getGeneralizedForce().e() - tauCFB_;
     raisim::VecDyn genForce;
-    genForce = gf;
+    genForce = articulated_->getGeneralizedForce().e() - tauCFB_;
     return genForce;
   }
 
-  // BOOKMARK: start coding setters
+  /**
+   * get the coriolis and the gravitational term
+   * @param[in] gravity gravitational acceleration. You should get this value from the world.getGravity();
+   * @return the coriolis and the gravitational term. Check Object/ArticulatedSystem section in the manual */
+  [[nodiscard]] const raisim::VecDyn getNonlinearities(const raisim::Vec<3>& gravity) {
+    raisim::VecDyn b;
+    b = articulated_->getNonlinearities(gravity).e() - tauCFB_; // when all else is zero, -tauCFB_ is required to cancel out CFB-induced residual force
+    return b;
+  }
+
   // setters that need special care
+
+  // Explicit wrappers avoid auto return deduction ordering issues.
+  void getPdTarget(Eigen::VectorXd &posTarget, Eigen::VectorXd &velTarget) {
+    updateRaipal();
+    articulated_->getPdTarget(posTarget, velTarget);
+  }
+
+  void getPdTarget(Eigen::VectorXd &posTarget, Eigen::VectorXd &velTarget) const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
+    articulated_->getPdTarget(posTarget, velTarget);
+  }
+
+  void getPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain) {
+    updateRaipal();
+    articulated_->getPdGains(pGain, dGain);
+  }
+
+  void getPdGains(Eigen::VectorXd &pGain, Eigen::VectorXd &dGain) const {
+    const_cast<ArticulatedRaipal*>(this)->updateRaipal();
+    articulated_->getPdGains(pGain, dGain);
+  }
 
   // RAIPAL_SET(setRotorInertia)
   void setRotorInertia(const raisim::VecDyn &rotorInertia) {
@@ -226,14 +352,36 @@ class ArticulatedRaipal {
   void setGeneralizedForce(const raisim::VecDyn &tau) { 
     tauFF_ = tau.e();
     tauCFB_.setZero();
-    robot_->setGeneralizedForce(tauFF_);
+    articulated_->setGeneralizedForce(tauFF_);
     resetUpdateFlag();
   }
 
   void setGeneralizedForce(const Eigen::VectorXd &tau) { 
     tauFF_ = tau;
     tauCFB_.setZero();
-    robot_->setGeneralizedForce(tauFF_);
+    articulated_->setGeneralizedForce(tauFF_);
+    resetUpdateFlag();
+  }
+
+  // RAIPAL_SET(setPdTarget)              // pTarget, dTarget
+  /**
+   * set PD targets.
+   * @param[in] posTarget position target
+   * @param[in] velTarget velocity target */
+  void setPdTarget(const Eigen::VectorXd &posTarget, const Eigen::VectorXd &velTarget) {
+    RSFATAL_IF(cfbMode_ != CfbTargetMode::FROM_JOINT, "setPdTarget can only be used when CFB target mode is set to FROM_JOINT");
+    articulated_->setPdTarget(posTarget, velTarget);
+    resetUpdateFlag();
+  }
+  
+  // RAIPAL_SET(setPdGains)               // pGain, dGain
+  /**
+   * set PD gains.
+   * @param[in] pgain position gain (dimension == getDOF())
+   * @param[in] dgain velocity gain (dimension == getDOF())*/
+  void setPdGains(const Eigen::VectorXd &pgain, const Eigen::VectorXd &dgain) {
+    RSFATAL_IF(cfbMode_ != CfbTargetMode::FROM_JOINT, "setPdGains can only be used when CFB target mode is set to FROM_JOINT");
+    articulated_->setPdGains(pgain, dgain);
     resetUpdateFlag();
   }
 
@@ -241,12 +389,12 @@ class ArticulatedRaipal {
   RAIPAL_SET(setState)                 // gc, gv
   RAIPAL_SET(setGeneralizedCoordinate) // gc 
   RAIPAL_SET(setGeneralizedVelocity)   // gv
-  RAIPAL_SET(setPdTarget)              // pTarget, dTarget
-  RAIPAL_SET(setPTarget)               // pTarget
-  RAIPAL_SET(setDTarget)               // dTarget
-  RAIPAL_SET(setPdGains)               // pGain, dGain
-  RAIPAL_SET(setPGains)                // pGain
-  RAIPAL_SET(setDGains)                // dGain
+
+  // who uses these anyways?
+  // RAIPAL_SET(setPTarget)               // pTarget
+  // RAIPAL_SET(setDTarget)               // dTarget
+  // RAIPAL_SET(setPGains)                // pGain
+  // RAIPAL_SET(setDGains)                // dGain
 
   // forwarded to ArticluatedSystem (no need for wrapper intervention)
   RAIPAL_FORWARD(isSecondOrderOrHigher)
@@ -326,8 +474,6 @@ class ArticulatedRaipal {
   RAIPAL_UPDATE_GET(getContactPointVel)
   RAIPAL_FORWARD(setControlMode)
   RAIPAL_UPDATE_GET(getControlMode)
-  RAIPAL_UPDATE_GET(getPdTarget)
-  RAIPAL_UPDATE_GET(getPdGains)
   RAIPAL_FORWARD(setJointDamping)
   RAIPAL_FORWARD(computeSparseInverse)
   RAIPAL_FORWARD(massMatrixVecMul)
@@ -389,17 +535,17 @@ class ArticulatedRaipal {
   RAIPAL_FORWARD(appendJointLimits)
 
   void setGeneralizedCoordinate(std::initializer_list<double> jointState) {
-    robot_->setGeneralizedCoordinate(jointState);
+    articulated_->setGeneralizedCoordinate(jointState);
     resetUpdateFlag();
   }
 
   void setGeneralizedVelocity(std::initializer_list<double> jointVelocity) {
-    robot_->setGeneralizedVelocity(jointVelocity);
+    articulated_->setGeneralizedVelocity(jointVelocity);
     resetUpdateFlag();
   }
 
   void setGeneralizedForce(std::initializer_list<double> tau) {
-    robot_->setGeneralizedForce(tau);
+    articulated_->setGeneralizedForce(tau);
     resetUpdateFlag();
   }
 
@@ -413,7 +559,7 @@ private:
 
   struct actuatorState{
     size_t idx;
-    double sign;
+    int sign;
 
     // kinematic state
     double pos;
@@ -430,10 +576,11 @@ private:
     double gfTerm = 0.0;
   };
 
-  raisim::ArticulatedSystem* robot_ = nullptr;
+  raisim::ArticulatedSystem* articulated_ = nullptr;
   size_t dof_;
 
   std::vector<actuatorState> actuatorStates_;
+  CfbTargetMode cfbMode_ = CfbTargetMode::FROM_JOINT;
 
   bool updated_ = false;
   
