@@ -87,6 +87,64 @@ int main(int argc, char* argv[]) {
     mirroredLeftEndEffector.y() *= -1.0;
     return (rightEndEffector.e() - mirroredLeftEndEffector).norm();
   };
+  auto runPositionTrackingTest = [&](double duration, auto&& updatePdTargets) {
+    const size_t testSteps = (size_t)(duration / world.getTimeStep());
+
+    for (int sec=3; sec>0; sec--){
+      std::cout << "Starting in [" << sec << "]..." << std::endl;
+      raisim::USLEEP(1000000);
+    }
+    std::cout << "START!" << std::endl;
+
+    double maxPositionDiff = 0.0;
+    double avgPositionDiff = 0.0;
+    double maxEndEffectorDiff = 0.0;
+    double avgEndEffectorDiff = 0.0;
+    const size_t printEverySteps = std::max<size_t>(1, (size_t)(0.1 / world.getTimeStep()));
+
+    testTimer.reset();
+    for (size_t t = 0; t<testSteps; t++){
+      testTimer.tick();
+
+      updatePdTargets(t, testSteps);
+
+      raipal7->updateRaipal();
+      server.integrateWorldThreadSafe();
+      raipal7->resetUpdateFlags();
+
+      raipal9->getState(gc9, gv9);
+      raipal7->getState(gc7, gv7);
+      raipal7->getActuatorState(gc7Actuator, gv7Actuator);
+
+      const Eigen::VectorXd positionDiff = mirroredPositionDiff(gc9, gc7, gc7Actuator);
+      maxPositionDiff = std::max(maxPositionDiff, positionDiff.maxCoeff());
+      avgPositionDiff += positionDiff.mean() / (double)testSteps;
+
+      const double endEffectorDiff = mirroredEndEffectorDiff();
+      maxEndEffectorDiff = std::max(maxEndEffectorDiff, endEffectorDiff);
+      avgEndEffectorDiff += endEffectorDiff / (double)testSteps;
+
+      if (t % printEverySteps == 0 || t + 1 == testSteps) {
+        std::cout
+          << "[STEP " << t << "]"
+          // << "\n  target9: " << pTarget9.transpose()
+          // << "\n  target7: " << pTarget7.transpose()
+          << " positionDiff max: " << positionDiff.maxCoeff() * 180.0 / M_PI << " deg"
+          << ", positionDiff avg: " << positionDiff.mean() * 180.0 / M_PI << " deg"
+          << ", eeDiff: " << endEffectorDiff * 1e3 << " mm"
+          << std::endl;
+      }
+    }
+    testTimer.end();
+
+    std::cout << "Position diff: " << 
+      " max: " << maxPositionDiff * 180.0 / M_PI << " deg" << 
+      " avg: " << avgPositionDiff * 180.0 / M_PI << " deg" << std::endl;
+
+    std::cout << "End-effector pos. diff: " <<
+      " max: " << maxEndEffectorDiff * 1e3 << " mm" <<
+      " avg: " << avgEndEffectorDiff * 1e3 << " mm" << std::endl;
+  };
 
   raipal9->setState(Eigen::VectorXd::Zero(9), Eigen::VectorXd::Zero(9));
   raipal7->setState(Eigen::VectorXd::Zero(7), Eigen::VectorXd::Zero(7));
@@ -294,7 +352,6 @@ int main(int argc, char* argv[]) {
   }
 
   
-  size_t test4Steps = (size_t)(TEST4_DURATION/world.getTimeStep());
   if(TEST4_DURATION > 0.0){
     std::cout << "=== Sine-Wave Joint-Side Test ===" << std::endl;
 
@@ -344,26 +401,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Initial gc7: " << gc7.transpose() << std::endl;
 
     std::array<double,2> freq = {1.0, 5.0};
-
-    for (int sec=3; sec>0; sec--){
-      std::cout << "Starting in [" << sec << "]..." << std::endl;
-      raisim::USLEEP(1000000);
-    }
-    std::cout << "START!" << std::endl;
-
-    double maxPositionDiff = 0.0;
-    double avgPositionDiff = 0.0;
-    double maxEndEffectorDiff = 0.0;
-    double avgEndEffectorDiff = 0.0;
-
     double theta = 0.0;
-    const size_t printEverySteps = std::max<size_t>(1, (size_t)(0.1 / world.getTimeStep()));
-
-    testTimer.reset();
-    for (size_t t = 0; t<test4Steps; t++){
-      testTimer.tick();
-
-      const double currentFreq = freq[0] + (freq[1] - freq[0]) * ((double)t / (double)test4Steps);
+    runPositionTrackingTest(TEST4_DURATION, [&](size_t t, size_t testSteps) {
+      const double currentFreq = freq[0] + (freq[1] - freq[0]) * ((double)t / (double)testSteps);
       theta += 2.0 * M_PI * currentFreq * world.getTimeStep();
 
       pTarget9 = sweepCenter9 + std::sin(theta) * sweepAmplitude9;
@@ -372,50 +412,13 @@ int main(int argc, char* argv[]) {
 
       raipal9->setPdTarget(pTarget9, dTarget9);
       raipal7->setPdTarget(pTarget7, dTarget7);
-
-      raipal7->updateRaipal();
-      server.integrateWorldThreadSafe();
-      raipal7->resetUpdateFlags();
-
-      raipal9->getState(gc9, gv9);
-      raipal7->getState(gc7, gv7);
-      raipal7->getActuatorState(gc7Actuator, gv7Actuator);
-
-      const Eigen::VectorXd positionDiff = mirroredPositionDiff(gc9, gc7, gc7Actuator);
-      maxPositionDiff = std::max(maxPositionDiff, positionDiff.maxCoeff());
-      avgPositionDiff += positionDiff.mean() / (double)test4Steps;
-
-      const double endEffectorDiff = mirroredEndEffectorDiff();
-      maxEndEffectorDiff = std::max(maxEndEffectorDiff, endEffectorDiff);
-      avgEndEffectorDiff += endEffectorDiff / (double)test4Steps;
-
-      if (t % printEverySteps == 0 || t + 1 == test4Steps) {
-        std::cout
-          << "[STEP " << t << "]"
-          // << "\n  target9: " << pTarget9.transpose()
-          // << "\n  target7: " << pTarget7.transpose()
-          << " positionDiff max: " << positionDiff.maxCoeff() * 180.0 / M_PI << " deg"
-          << ", positionDiff avg: " << positionDiff.mean() * 180.0 / M_PI << " deg"
-          << ", eeDiff: " << endEffectorDiff * 1e3 << " mm"
-          << std::endl;
-      }
-    }
-    testTimer.end();
-
-    std::cout << "Position diff: " << 
-      " max: " << maxPositionDiff * 180.0 / M_PI << " deg" << 
-      " avg: " << avgPositionDiff * 180.0 / M_PI << " deg" << std::endl;
-
-    std::cout << "End-effector pos. diff: " <<
-      " max: " << maxEndEffectorDiff * 1e3 << " mm" <<
-      " avg: " << avgEndEffectorDiff * 1e3 << " mm" << std::endl;
+    });
   }
   else {
     std::cout << "No sine-wave joint-side test, skipping..." << std::endl;
   }
 
   
-  size_t test5Steps = (size_t)(TEST5_DURATION/world.getTimeStep());
   if(TEST5_DURATION > 0.0){
     std::cout << "=== Sine-Wave Actuator-Side Test ===" << std::endl;
 
@@ -468,26 +471,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Initial gc7: " << gc7.transpose() << std::endl;
 
     std::array<double,2> freq = {1.0, 5.0};
-
-    for (int sec=3; sec>0; sec--){
-      std::cout << "Starting in [" << sec << "]..." << std::endl;
-      raisim::USLEEP(1000000);
-    }
-    std::cout << "START!" << std::endl;
-
-    double maxPositionDiff = 0.0;
-    double avgPositionDiff = 0.0;
-    double maxEndEffectorDiff = 0.0;
-    double avgEndEffectorDiff = 0.0;
-
     double theta = 0.0;
-    const size_t printEverySteps = std::max<size_t>(1, (size_t)(0.1 / world.getTimeStep()));
-
-    testTimer.reset();
-    for (size_t t = 0; t<test5Steps; t++){
-      testTimer.tick();
-
-      const double currentFreq = freq[0] + (freq[1] - freq[0]) * ((double)t / (double)test5Steps);
+    runPositionTrackingTest(TEST5_DURATION, [&](size_t t, size_t testSteps) {
+      const double currentFreq = freq[0] + (freq[1] - freq[0]) * ((double)t / (double)testSteps);
       theta += 2.0 * M_PI * currentFreq * world.getTimeStep();
 
       pTarget9 = sweepCenter9 + std::sin(theta) * sweepAmplitude9;
@@ -496,49 +482,12 @@ int main(int argc, char* argv[]) {
 
       raipal9->setPdTarget(pTarget9, dTarget9);
       raipal7->setActuatorPdTarget(pTarget7, dTarget7);
-
-      raipal7->updateRaipal();
-      server.integrateWorldThreadSafe();
-      raipal7->resetUpdateFlags();
-
-      raipal9->getState(gc9, gv9);
-      raipal7->getState(gc7, gv7);
-      raipal7->getActuatorState(gc7Actuator, gv7Actuator);
-
-      const Eigen::VectorXd positionDiff = mirroredPositionDiff(gc9, gc7, gc7Actuator);
-      maxPositionDiff = std::max(maxPositionDiff, positionDiff.maxCoeff());
-      avgPositionDiff += positionDiff.mean() / (double)test5Steps;
-
-      const double endEffectorDiff = mirroredEndEffectorDiff();
-      maxEndEffectorDiff = std::max(maxEndEffectorDiff, endEffectorDiff);
-      avgEndEffectorDiff += endEffectorDiff / (double)test5Steps;
-
-      if (t % printEverySteps == 0 || t + 1 == test5Steps) {
-        std::cout
-          << "[STEP " << t << "]"
-          // << "\n  target9: " << pTarget9.transpose()
-          // << "\n  target7: " << pTarget7.transpose()
-          << " positionDiff max: " << positionDiff.maxCoeff() * 180.0 / M_PI << " deg"
-          << ", positionDiff avg: " << positionDiff.mean() * 180.0 / M_PI << " deg"
-          << ", eeDiff: " << endEffectorDiff * 1e3 << " mm"
-          << std::endl;
-      }
-    }
-    testTimer.end();
-
-    std::cout << "Position diff: " << 
-      " max: " << maxPositionDiff * 180.0 / M_PI << " deg" << 
-      " avg: " << avgPositionDiff * 180.0 / M_PI << " deg" << std::endl;
-
-    std::cout << "End-effector pos. diff: " <<
-      " max: " << maxEndEffectorDiff * 1e3 << " mm" <<
-      " avg: " << avgEndEffectorDiff * 1e3 << " mm" << std::endl;
+    });
   }
   else {
     std::cout << "No sine-wave actuator-side test, skipping..." << std::endl;
   }
 
-  size_t test6Steps = (size_t)(TEST6_DURATION/world.getTimeStep());
   if(TEST6_DURATION > 0.0){
     std::cout << "=== Random Actuator-Side Target Test ===" << std::endl;
 
@@ -576,34 +525,18 @@ int main(int argc, char* argv[]) {
     std::cout << "Initial gc9: " << gc9.transpose() << std::endl;
     std::cout << "Initial gc7: " << gc7.transpose() << std::endl;
 
-    for (int sec=3; sec>0; sec--){
-      std::cout << "Starting in [" << sec << "]..." << std::endl;
-      raisim::USLEEP(1000000);
-    }
-    std::cout << "START!" << std::endl;
-
-    double maxPositionDiff = 0.0;
-    double avgPositionDiff = 0.0;
-    double maxEndEffectorDiff = 0.0;
-    double avgEndEffectorDiff = 0.0;
-
     const double randomTargetFrequency = 5.0;
     const size_t randomTargetSteps = std::max<size_t>(
       1,
       (size_t)std::round((1.0 / randomTargetFrequency) / world.getTimeStep())
     );
-    const size_t printEverySteps = std::max<size_t>(1, (size_t)(0.1 / world.getTimeStep()));
-
     Eigen::VectorXd randomTargetStart9 = gc9;
     Eigen::VectorXd randomTargetEnd9(9);
     utils::sampleJointPose(randomTargetEnd9, jointLimits9, padRatio9);
 
     std::cout << "Random target frequency: " << randomTargetFrequency << " Hz" << std::endl;
 
-    testTimer.reset();
-    for (size_t t = 0; t<test6Steps; t++){
-      testTimer.tick();
-
+    runPositionTrackingTest(TEST6_DURATION, [&](size_t t, size_t) {
       if (t > 0 && t % randomTargetSteps == 0) {
         randomTargetStart9 = randomTargetEnd9;
         utils::sampleJointPose(randomTargetEnd9, jointLimits9, padRatio9);
@@ -617,43 +550,7 @@ int main(int argc, char* argv[]) {
 
       raipal9->setPdTarget(pTarget9, dTarget9);
       raipal7->setActuatorPdTarget(pTarget7, dTarget7);
-
-      raipal7->updateRaipal();
-      server.integrateWorldThreadSafe();
-      raipal7->resetUpdateFlags();
-
-      raipal9->getState(gc9, gv9);
-      raipal7->getState(gc7, gv7);
-      raipal7->getActuatorState(gc7Actuator, gv7Actuator);
-
-      const Eigen::VectorXd positionDiff = mirroredPositionDiff(gc9, gc7, gc7Actuator);
-      maxPositionDiff = std::max(maxPositionDiff, positionDiff.maxCoeff());
-      avgPositionDiff += positionDiff.mean() / (double)test6Steps;
-
-      const double endEffectorDiff = mirroredEndEffectorDiff();
-      maxEndEffectorDiff = std::max(maxEndEffectorDiff, endEffectorDiff);
-      avgEndEffectorDiff += endEffectorDiff / (double)test6Steps;
-
-      if (t % printEverySteps == 0 || t + 1 == test6Steps) {
-        std::cout
-          << "[STEP " << t << "]"
-          // << "\n  target9: " << pTarget9.transpose()
-          // << "\n  target7: " << pTarget7.transpose()
-          << " positionDiff max: " << positionDiff.maxCoeff() * 180.0 / M_PI << " deg"
-          << ", positionDiff avg: " << positionDiff.mean() * 180.0 / M_PI << " deg"
-          << ", eeDiff: " << endEffectorDiff * 1e3 << " mm"
-          << std::endl;
-      }
-    }
-    testTimer.end();
-
-    std::cout << "Position diff: " << 
-      " max: " << maxPositionDiff * 180.0 / M_PI << " deg" << 
-      " avg: " << avgPositionDiff * 180.0 / M_PI << " deg" << std::endl;
-
-    std::cout << "End-effector pos. diff: " <<
-      " max: " << maxEndEffectorDiff * 1e3 << " mm" <<
-      " avg: " << avgEndEffectorDiff * 1e3 << " mm" << std::endl;
+    });
   }
   else {
     std::cout << "No random actuator-side target test, skipping..." << std::endl;
