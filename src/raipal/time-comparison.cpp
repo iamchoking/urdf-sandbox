@@ -197,7 +197,7 @@ static TimingStats runRaipal7Test() {
     const auto start = std::chrono::steady_clock::now();
     world.integrate();
     const auto end = std::chrono::steady_clock::now();
-    raipal7->resetUpdateFlag();
+    raipal7->resetUpdateFlags();
 
     const std::chrono::duration<double> elapsed = end - start;
     stats.add(elapsed.count());
