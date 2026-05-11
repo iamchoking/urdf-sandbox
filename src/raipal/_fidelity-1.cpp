@@ -13,14 +13,25 @@
 
 double PLAYBACK_SPEED = 1.0;
 double SIM_TIMESTEP = 0.0001;
-bool RANDOM_SEED = true;
+bool RANDOM_SEED = false;
 
+// size_t TEST1_NUM_POSES = 5;  // random pose test
 size_t TEST1_NUM_POSES = 0;  // random pose test
+
+// double TEST2_DURATION  = 5.0;  // pendulum test
 double TEST2_DURATION  = 0.0;  // pendulum test
-double TEST3_DURATION  = 0.0;  // elbow drop test (~1.0s)
+
+// double TEST3_DURATION  = 1.0;  // elbow drop test (~1.0s)
+double TEST3_DURATION  = 1.0;  // elbow drop test (~1.0s)
+
+// double TEST4_DURATION  = 5.0;  // sine-wave joint-side test (~5.0s)
 double TEST4_DURATION  = 0.0;  // sine-wave joint-side test (~5.0s)
+
+// double TEST5_DURATION  = 5.0;  // sine-wave actuator-side test
 double TEST5_DURATION  = 0.0;  // sine-wave actuator-side test
-double TEST6_DURATION  = 10.0;  // random actuator-side target test
+
+double TEST6_DURATION  = 5.0;  // random actuator-side target test
+// double TEST6_DURATION  = 0.0;  // random actuator-side target test
 
 namespace rk9 = raipal::kinematics;
 
@@ -420,6 +431,8 @@ int main(int argc, char* argv[]) {
 
   
   if(TEST5_DURATION > 0.0){
+    raipal7->setCfbTargetFromActuator();
+
     std::cout << "=== Sine-Wave Actuator-Side Test ===" << std::endl;
 
     Eigen::VectorXd sweepCenter9(9), sweepAmplitude9(9), sweepLimits9(9), padRatio9(9), minAmplitudeRatio9(9), maxAmplitudeRatio9(9);
@@ -442,11 +455,11 @@ int main(int argc, char* argv[]) {
     gc9 = sweepCenter9;
     gv9.setZero();
 
-    gc7 << -gc9.head(3), -gc9.tail(4);
-    gv7 << -gv9.head(3), -gv9.tail(4);
+    gc7 << -gc9.head(4), -gc9.tail(3);
+    gv7 << -gv9.head(4), -gv9.tail(3);
 
     raipal9->setState(gc9, gv9);
-    raipal7->setState(gc7, gv7);
+    raipal7->setActuatorState(gc7, gv7);
 
     pTarget9 = gc9;
     dTarget9 = gv9;
@@ -454,9 +467,7 @@ int main(int argc, char* argv[]) {
     dTarget7 = gv7;
 
     raipal9->setPdTarget(pTarget9, dTarget9);
-    raipal7->setPdTarget(pTarget7, dTarget7);
-
-    raipal7->setCfbTargetFromActuator();
+    raipal7->setActuatorPdTarget(pTarget7, dTarget7);
 
     pGain9 << 100, 100, 100, 100, 0, 0, 100, 100, 100;
     dGain9 << 10 , 10 , 10 , 10 , 0, 0, 10 , 10 , 10 ;
@@ -489,6 +500,8 @@ int main(int argc, char* argv[]) {
   }
 
   if(TEST6_DURATION > 0.0){
+    raipal7->setCfbTargetFromActuator();
+
     std::cout << "=== Random Actuator-Side Target Test ===" << std::endl;
 
     Eigen::VectorXd padRatio9(9);
@@ -498,11 +511,11 @@ int main(int argc, char* argv[]) {
     rk9::cfbForward(gc9);
     gv9.setZero();
 
-    gc7 << -gc9.head(3), -gc9.tail(4);
-    gv7 << -gv9.head(3), -gv9.tail(4);
+    gc7 << -gc9.head(4), -gc9.tail(3);
+    gv7 << -gv9.head(4), -gv9.tail(3);
 
     raipal9->setState(gc9, gv9);
-    raipal7->setState(gc7, gv7);
+    raipal7->setActuatorState(gc7, gv7);
 
     pTarget9 = gc9;
     dTarget9 = gv9;
@@ -510,9 +523,7 @@ int main(int argc, char* argv[]) {
     dTarget7 = gv7;
 
     raipal9->setPdTarget(pTarget9, dTarget9);
-    raipal7->setPdTarget(pTarget7, dTarget7);
-
-    raipal7->setCfbTargetFromActuator();
+    raipal7->setActuatorPdTarget(pTarget7, dTarget7);
 
     pGain9 << 100, 100, 100, 100, 0, 0, 100, 100, 100;
     dGain9 << 10 , 10 , 10 , 10 , 0, 0, 10 , 10 , 10 ;
