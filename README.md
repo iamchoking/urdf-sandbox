@@ -2,6 +2,8 @@
 
 Collection of small RaiSim demos for experimenting with RAIPAL and other URDF configurations.
 
+**IMPORTANT: This repo is a dummy repo and random pushes to `master` can and will happen by the owner. So, refer or use at your own risk!**
+
 ## Dependencies
 - [RaiSim](https://raisim.com/) (match the version used inside this workspace and ensure `raisim::raisim` is discoverable through `CMAKE_PREFIX_PATH`).
 - [`raipal_kinematics`](https://github.com/railabatkaist/raipal_kinematics) – provides the crossed four-bar helpers shared with the production RAIPAL stack. Install it system-wide (e.g. `git clone ... && ./install.sh`) so `find_package(raipal_kinematics CONFIG REQUIRED)` succeeds.

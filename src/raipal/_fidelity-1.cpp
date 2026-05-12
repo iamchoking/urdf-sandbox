@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
   //   ,{3}, {-1.0}
   // );
 
-  auto raipal7 = Raipal(world.addArticulatedSystem(
+  auto raipal7 = raisim::Raipal(world.addArticulatedSystem(
     std::string(_MAKE_STR(RESOURCE_DIR)) +  "/raipal/urdf/raipal_stub-0_L.urdf")
     ,{3}, {-1}
   );

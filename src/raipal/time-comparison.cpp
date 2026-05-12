@@ -137,7 +137,7 @@ static TimingStats runRaipal7Test() {
   raisim::World world;
   world.setTimeStep(SIM_TIMESTEP);
 
-  Raipal raipal7(
+  raisim::Raipal raipal7(
       world.addArticulatedSystem(
           std::string(_MAKE_STR(RESOURCE_DIR)) + "/raipal/urdf/raipal_stub-0_L.urdf"),
       {3},
