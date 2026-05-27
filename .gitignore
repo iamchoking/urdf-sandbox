@@ -2,3 +2,5 @@ build/*
 cmake-*/*
 .DS_Store
 .idea/*
+
+resource/parameter_length_check/
