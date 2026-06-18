@@ -9,11 +9,11 @@ find_package(raipal_kinematics CONFIG REQUIRED)
 set(CMAKE_CXX_STANDARD 17)
 include(cmake/helper.cmake)
 
-add_subdirectory(src/raipal/raisimRaipal EXCLUDE_FROM_ALL)
+add_subdirectory(thirdParty/raisimRaipal EXCLUDE_FROM_ALL)
 
 # Automatically create executables for all .cpp files in src directory and subdirectories
 file(GLOB_RECURSE SOURCE_FILES "src/*.cpp")
-list(FILTER SOURCE_FILES EXCLUDE REGEX ".*/src/raipal/raisimRaipal/.*\\.cpp$")
+list(FILTER SOURCE_FILES EXCLUDE REGEX ".*/thirdParty/raisimRaipal/.*\\.cpp$")
 
 foreach(SOURCE_FILE ${SOURCE_FILES})
     # Get the relative path from src/ and use it as the executable name (replace .cpp with nothing)
