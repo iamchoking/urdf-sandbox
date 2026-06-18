@@ -7,7 +7,7 @@
 #include <limits>
 
 #include <raipal_kinematics/raipal_cfb.hpp>
-#include "raisimRaipal/cfbSolution.hpp"
+#include "raisimRaipal/RaipalConstants.hpp"
 #include "frame_timer.hpp"
 
 double PLAYBACK_SPEED = 1.0;
