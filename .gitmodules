@@ -15,3 +15,7 @@
 [submodule "thirdParty/raisimRaipal"]
 	path = thirdParty/raisimRaipal
 	url = git@github.com:railabatkaist/raisimRaipal.git
+[submodule "thirdParty/raisim2Raipal"]
+	path = thirdParty/raisim2Raipal
+	url = git@github.com:railabatkaist/raisimRaipal.git
+	branch = raisim2
