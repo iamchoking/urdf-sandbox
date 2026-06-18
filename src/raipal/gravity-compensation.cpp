@@ -6,6 +6,7 @@
 #include <Eigen/Core>
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <random>
 #include <string>
@@ -18,6 +19,8 @@ namespace {
 
 double PLAYBACK_SPEED = 1.0;
 double SIM_TIMESTEP = 0.0001;
+double JOINT_LIMIT_SPRING_MARGIN = 0.1;
+double JOINT_LIMIT_SPRING_CONSTANT = 10.0;
 
 constexpr size_t NUM_TRIALS = 20;
 constexpr double PD_TARGET_DURATION = 0.2;
@@ -61,6 +64,38 @@ Eigen::VectorXd jointLimitCenter(const std::vector<raisim::Vec<2>>& jointLimits)
     pose[idx] = 0.5 * (jointLimits[idx][0] + jointLimits[idx][1]);
   }
   return pose;
+}
+
+void addJointLimitSpringTorque(
+    Eigen::VectorXd& torque,
+    const Eigen::VectorXd& position,
+    const std::vector<raisim::Vec<2>>& jointLimits) {
+  if (JOINT_LIMIT_SPRING_MARGIN <= 0.0 || JOINT_LIMIT_SPRING_CONSTANT == 0.0) {
+    return;
+  }
+
+  const size_t count = std::min(
+      jointLimits.size(),
+      std::min(static_cast<size_t>(position.size()), static_cast<size_t>(torque.size())));
+
+  for (size_t idx = 0; idx < count; ++idx) {
+    const double lower = jointLimits[idx][0];
+    const double upper = jointLimits[idx][1];
+    if (!std::isfinite(lower) || !std::isfinite(upper) || upper <= lower) {
+      continue;
+    }
+
+    const double margin = std::min(JOINT_LIMIT_SPRING_MARGIN, 0.5 * (upper - lower));
+    const double lowerSpringStart = lower + margin;
+    const double upperSpringStart = upper - margin;
+    const double q = position[idx];
+
+    if (q < lowerSpringStart) {
+      torque[idx] += JOINT_LIMIT_SPRING_CONSTANT * (lowerSpringStart - q);
+    } else if (q > upperSpringStart) {
+      torque[idx] -= JOINT_LIMIT_SPRING_CONSTANT * (q - upperSpringStart);
+    }
+  }
 }
 
 }  // namespace
@@ -116,6 +151,8 @@ int main(int argc, char* argv[]) {
   std::cout << "PD target duration: " << PD_TARGET_DURATION << " s" << std::endl;
   std::cout << "Zero-gain duration: " << ZERO_GAIN_DURATION << " s" << std::endl;
   std::cout << "PD gains: kp=" << POSITION_GAIN << ", kd=" << VELOCITY_GAIN << std::endl;
+  std::cout << "Joint-limit spring: margin=" << JOINT_LIMIT_SPRING_MARGIN
+            << " rad, k=" << JOINT_LIMIT_SPRING_CONSTANT << " Nm/rad" << std::endl;
   std::cout << "Playback speed: " << PLAYBACK_SPEED << "x" << std::endl;
 
   FrameTimer timer(playbackTimestep, false);
@@ -140,7 +177,10 @@ int main(int argc, char* argv[]) {
 
       const Eigen::VectorXd gravityCompensation =
           raipal->getCurrentNonlinearities(world.getGravity()).e();
-      raipal->setCurrentGeneralizedForce(gravityCompensation);
+      Eigen::VectorXd commandedTorque = gravityCompensation;
+      raipal->getCurrentState(currentPosition, currentVelocity);
+      addJointLimitSpringTorque(commandedTorque, currentPosition, jointLimits);
+      raipal->setCurrentGeneralizedForce(commandedTorque);
 
       raipal->updateRaipal();
       server.integrateWorldThreadSafe();
