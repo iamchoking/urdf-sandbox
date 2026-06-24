@@ -27,11 +27,11 @@ double TEST3_DURATION  = 1.0;  // elbow drop test (~1.0s)
 // double TEST4_DURATION  = 5.0;  // sine-wave joint-side test (~5.0s)
 double TEST4_DURATION  = 0.0;  // sine-wave joint-side test (~5.0s)
 
-// double TEST5_DURATION  = 5.0;  // sine-wave actuator-side test
-double TEST5_DURATION  = 0.0;  // sine-wave actuator-side test
+double TEST5_DURATION  = 5.0;  // sine-wave actuator-side test
+// double TEST5_DURATION  = 0.0;  // sine-wave actuator-side test
 
-double TEST6_DURATION  = 5.0;  // random actuator-side target test
-// double TEST6_DURATION  = 0.0;  // random actuator-side target test
+// double TEST6_DURATION  = 5.0;  // random actuator-side target test
+double TEST6_DURATION  = 0.0;  // random actuator-side target test
 
 namespace rk9 = raipal::kinematics;
 

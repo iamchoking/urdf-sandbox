@@ -18,19 +18,37 @@
 namespace {
 
 double PLAYBACK_SPEED = 1.0;
-double SIM_TIMESTEP = 0.0001;
+double SIM_TIMESTEP = 0.001;
 double JOINT_LIMIT_SPRING_MARGIN = 0.1;
 double JOINT_LIMIT_SPRING_CONSTANT = 10.0;
 
+#if RAISIM_RAIPAL_USE_RAISIM2
+constexpr const char* VERSION_LABEL = "raisim2 2.3.0";
+#else
+constexpr const char* VERSION_LABEL = "raisim 1.1.8";
+#endif
 constexpr size_t NUM_TRIALS = 20;
+constexpr size_t QUICK_NUM_TRIALS = 2;
 constexpr double PD_TARGET_DURATION = 0.2;
+constexpr double QUICK_PD_TARGET_DURATION = 0.02;
 constexpr double ZERO_GAIN_DURATION = 10.0;
+constexpr double QUICK_ZERO_GAIN_DURATION = 0.05;
 constexpr double POSITION_ERROR_RANGE = 1.0;
+constexpr unsigned RNG_SEED = 42;
 
 constexpr double POSITION_GAIN = 10.0;
 constexpr double VELOCITY_GAIN = 1.0;
 
 std::string URDF_PATH = "/raipal/urdf/raipal_stub-0_L.urdf";
+
+bool hasArg(int argc, char* argv[], const std::string& option) {
+  for (int idx = 1; idx < argc; ++idx) {
+    if (option == argv[idx]) {
+      return true;
+    }
+  }
+  return false;
+}
 
 double getPlaybackTimestep(double simulationTimestep) {
   if (PLAYBACK_SPEED <= 0.0) {
@@ -64,6 +82,22 @@ Eigen::VectorXd jointLimitCenter(const std::vector<raisim::Vec<2>>& jointLimits)
     pose[idx] = 0.5 * (jointLimits[idx][0] + jointLimits[idx][1]);
   }
   return pose;
+}
+
+Eigen::VectorXd safeNominalPosition(const std::vector<raisim::Vec<2>>& jointLimits) {
+  Eigen::VectorXd pose = jointLimitCenter(jointLimits);
+  const std::vector<double> preferred{-0.3, 0.6, 0.0, -1.0, 0.0, 0.2, -0.1};
+
+  const size_t count = std::min(jointLimits.size(), preferred.size());
+  for (size_t idx = 0; idx < count; ++idx) {
+    pose[idx] = std::clamp(preferred[idx], jointLimits[idx][0], jointLimits[idx][1]);
+  }
+
+  return pose;
+}
+
+void printVector(const std::string& label, const Eigen::VectorXd& value) {
+  std::cout << label << ": " << value.transpose() << std::endl;
 }
 
 void addJointLimitSpringTorque(
@@ -104,6 +138,11 @@ int main(int argc, char* argv[]) {
   auto binaryPath = raisim::Path::setFromArgv(argv[0]);
   (void)binaryPath;
 
+  const bool headless = hasArg(argc, argv, "--headless");
+  const bool quick = hasArg(argc, argv, "--quick");
+  const bool fast = hasArg(argc, argv, "--fast");
+  const bool realtime = hasArg(argc, argv, "--realtime") || (!headless && !fast);
+
   raisim::World world;
   world.setTimeStep(SIM_TIMESTEP);
   const double playbackTimestep = getPlaybackTimestep(world.getTimeStep());
@@ -129,34 +168,51 @@ int main(int argc, char* argv[]) {
   Eigen::VectorXd zeroGain = Eigen::VectorXd::Zero(dof);
 
   auto jointLimits = raipal->getCurrentJointLimits();
-  std::mt19937 rng(std::random_device{}());
+  std::mt19937 rng(RNG_SEED);
 
-  Eigen::VectorXd nominalPosition = jointLimitCenter(jointLimits);
+  Eigen::VectorXd nominalPosition = safeNominalPosition(jointLimits);
   raipal->setCurrentState(nominalPosition, zeroVelocity);
   raipal->setCurrentPdTarget(nominalPosition, zeroVelocity);
   raipal->setCurrentPdGains(zeroGain, zeroGain);
+  raipal->setCurrentGeneralizedForce(raipal->getCurrentNonlinearities(world.getGravity()).e());
+  raipal->updateRaipal();
 
-  server.launchServer();
-  server.focusOn(raipal.get());
-  world.integrate1();
+  if (!headless) {
+    server.launchServer();
+    server.focusOn(raipal.get());
+  }
+
+  const size_t numTrials = quick ? QUICK_NUM_TRIALS : NUM_TRIALS;
+  const double pdTargetDuration = quick ? QUICK_PD_TARGET_DURATION : PD_TARGET_DURATION;
+  const double zeroGainDuration = quick ? QUICK_ZERO_GAIN_DURATION : ZERO_GAIN_DURATION;
 
   const size_t pdSteps = std::max<size_t>(
       1,
-      static_cast<size_t>(std::round(PD_TARGET_DURATION / world.getTimeStep())));
+      static_cast<size_t>(std::round(pdTargetDuration / world.getTimeStep())));
   const size_t zeroGainSteps = std::max<size_t>(
       1,
-      static_cast<size_t>(std::round(ZERO_GAIN_DURATION / world.getTimeStep())));
+      static_cast<size_t>(std::round(zeroGainDuration / world.getTimeStep())));
 
-  std::cout << "=== 7-DOF Gravity Compensation Test ===" << std::endl;
-  std::cout << "PD target duration: " << PD_TARGET_DURATION << " s" << std::endl;
-  std::cout << "Zero-gain duration: " << ZERO_GAIN_DURATION << " s" << std::endl;
+  std::cout << "=== 7-DOF Gravity Compensation Test (" << VERSION_LABEL << ") ===" << std::endl;
+  std::cout << "Mode: " << (headless ? "headless" : "server")
+            << ", realtime: " << (realtime ? "on" : "off")
+            << ", quick: " << (quick ? "on" : "off") << std::endl;
+  std::cout << "Trials: " << numTrials << std::endl;
+  std::cout << "PD target duration: " << pdTargetDuration << " s" << std::endl;
+  std::cout << "Zero-gain duration: " << zeroGainDuration << " s" << std::endl;
   std::cout << "PD gains: kp=" << POSITION_GAIN << ", kd=" << VELOCITY_GAIN << std::endl;
   std::cout << "Joint-limit spring: margin=" << JOINT_LIMIT_SPRING_MARGIN
             << " rad, k=" << JOINT_LIMIT_SPRING_CONSTANT << " Nm/rad" << std::endl;
   std::cout << "Playback speed: " << PLAYBACK_SPEED << "x" << std::endl;
+  printVector("Initial current position", nominalPosition);
+  printVector("Initial gc", raipal->getGeneralizedCoordinate().e());
 
   FrameTimer timer(playbackTimestep, false);
-  for (size_t trial = 0; trial < NUM_TRIALS; ++trial) {
+  if (!realtime) {
+    timer.disable();
+  }
+
+  for (size_t trial = 0; trial < numTrials; ++trial) {
     raipal->getCurrentState(currentPosition, currentVelocity);
     const Eigen::VectorXd target =
         sampleJointPositionErrorTarget(currentPosition, jointLimits, rng);
@@ -183,21 +239,29 @@ int main(int argc, char* argv[]) {
       raipal->setCurrentGeneralizedForce(commandedTorque);
 
       raipal->updateRaipal();
-      server.integrateWorldThreadSafe();
+      if (headless) {
+        world.integrate();
+      } else {
+        server.integrateWorldThreadSafe();
+      }
       raipal->resetUpdateFlags();
     }
 
     raipal->getCurrentState(currentPosition, currentVelocity);
     std::cout << "  final position: " << currentPosition.transpose() << std::endl;
     std::cout << "  final velocity: " << currentVelocity.transpose() << std::endl;
+    std::cout << "  final gc: " << raipal->getGeneralizedCoordinate().e().transpose() << std::endl;
 
     raipal->setCurrentState(nominalPosition, zeroVelocity);
     raipal->setCurrentPdTarget(nominalPosition, zeroVelocity);
     raipal->setCurrentPdGains(zeroGain, zeroGain);
+    raipal->setCurrentGeneralizedForce(raipal->getCurrentNonlinearities(world.getGravity()).e());
     raipal->resetUpdateFlags();
   }
   timer.end();
 
-  server.killServer();
+  if (!headless) {
+    server.killServer();
+  }
   return 0;
 }

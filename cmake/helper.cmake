@@ -1,15 +1,17 @@
 
-message(STATUS "cmake prefix path: ${CMAKE_PREFIX_PATH}")
-find_package(raisim CONFIG REQUIRED)
-
 function(create_executable app_name file_name)
+    set(raisim_target "${ARGV2}")
+    if("${raisim_target}" STREQUAL "")
+        set(raisim_target raisim::raisim)
+    endif()
+
     add_executable(${app_name} ${file_name})
     set_target_properties(${app_name} PROPERTIES MACOSX_RPATH "${CMAKE_CURRENT_SOURCE_DIR}/../raisim/mac/lib")
     if(WIN32)
-        target_link_libraries(${app_name} PUBLIC raisim::raisim Ws2_32 Winmm)
+        target_link_libraries(${app_name} PUBLIC ${raisim_target} Ws2_32 Winmm)
         target_compile_options(${app_name} PRIVATE "/MP")
     else()
-        target_link_libraries(${app_name} PUBLIC raisim::raisim pthread)
+        target_link_libraries(${app_name} PUBLIC ${raisim_target} pthread)
     endif()
 
     if(APPLE)
@@ -23,8 +25,10 @@ function(create_executable app_name file_name)
         endif()
     endif()
 
-    # target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/_utils)
-    target_include_directories(${app_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/solutions ${CMAKE_CURRENT_SOURCE_DIR}/src/_utils)
+    target_include_directories(${app_name} PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/solutions
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/_utils)
 
     target_compile_definitions(${app_name} PRIVATE RESOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/resource)
 endfunction()

@@ -1,0 +1,47 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 22,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "rs1",
+            "displayName": "RaiSim 1.1.8",
+            "description": "Build src against raisimLib 1.1.8.",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build_rs1",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "URDF_SANDBOX_RAISIM_VERSION": "rs1",
+                "RAISIM1_PREFIX": "${sourceDir}/../raisimLib/raisim/linux"
+            }
+        },
+        {
+            "name": "rs2",
+            "displayName": "RaiSim2 2.3.0",
+            "description": "Build src against raisim2Lib.",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build_rs2",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "URDF_SANDBOX_RAISIM_VERSION": "rs2",
+                "RAISIM1_PREFIX": "${sourceDir}/../raisimLib/raisim/linux",
+                "RAISIM2_PREFIX": "${sourceDir}/../raisim2Lib/raisim"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "rs1",
+            "displayName": "Build RaiSim 1.1.8",
+            "configurePreset": "rs1"
+        },
+        {
+            "name": "rs2",
+            "displayName": "Build RaiSim2 2.3.0",
+            "configurePreset": "rs2"
+        }
+    ]
+}

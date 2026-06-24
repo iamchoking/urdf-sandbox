@@ -115,6 +115,33 @@ std::string sanitizeName(std::string name) {
   return name;
 }
 
+bool hasPathPart(const fs::path &path, const std::string &part) {
+  for (const auto &pathPart : path) {
+    if (pathPart == part)
+      return true;
+  }
+  return false;
+}
+
+bool isUnsupportedStandaloneUrdf(const fs::path &urdfPath) {
+  const std::string filename = urdfPath.filename().string();
+  if (filename == "trackedTemplate.urdf")
+    return true;
+  if (hasPathPart(urdfPath, "raw"))
+    return true;
+  if (filename == "raipal_base.urdf")
+    return true;
+  if (filename == "raipal_upper-only_L.urdf" || filename == "raipal_upper-only_R.urdf")
+    return true;
+  return false;
+}
+
+bool isUnsupportedModuleCase(const ModuleCase &moduleCase) {
+  return moduleCase.target == "raipal_base" ||
+         moduleCase.target == "raipal_upper-only_L" ||
+         moduleCase.target == "raipal_upper-only_R";
+}
+
 template <typename Derived>
 std::string eigenValues(const Eigen::MatrixBase<Derived> &values, int maxItems = 96) {
   std::ostringstream out;
@@ -332,6 +359,8 @@ std::vector<fs::path> findUrdfs(const fs::path &resourceRoot) {
       continue;
     if (entry.path().filename().string().rfind("generated_", 0) == 0)
       continue;
+    if (isUnsupportedStandaloneUrdf(entry.path()))
+      continue;
     urdfs.push_back(fs::canonical(entry.path()));
   }
   std::sort(urdfs.begin(), urdfs.end());
@@ -404,6 +433,8 @@ std::vector<ModuleCase> findModuleCases(const fs::path &resourceRoot) {
   std::set<std::string> seen;
   for (const auto &seed : findSeedFiles(resourceRoot)) {
     for (const auto &moduleCase : parseSeedFile(seed)) {
+      if (isUnsupportedModuleCase(moduleCase))
+        continue;
       std::ostringstream key;
       key << moduleCase.packageRoot << '|' << moduleCase.target << '|' << joinModules(moduleCase.modules);
       if (seen.insert(key.str()).second)

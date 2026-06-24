@@ -173,8 +173,15 @@ int main(int argc, char* argv[]) {
   }
   const Eigen::Vector3d initialPayloadPosition = eigen(tipWorld) + payloadOffset;
   payload->setPosition(initialPayloadPosition);
-  const raisim::Vec<3> zeroVelocity = {0.0, 0.0, 0.0};
-  payload->setVelocity(options.matchTipVelocity ? tipVelocity : zeroVelocity, zeroVelocity);
+  const Eigen::Vector3d initialPayloadVelocity =
+      options.matchTipVelocity ? eigen(tipVelocity) : Eigen::Vector3d::Zero();
+  payload->setVelocity(
+      initialPayloadVelocity.x(),
+      initialPayloadVelocity.y(),
+      initialPayloadVelocity.z(),
+      0.0,
+      0.0,
+      0.0);
 
   const raisim::Vec<3> payloadMountInBody = {0.0, 0.0, 0.0};
   raisim::LengthConstraint* wire = nullptr;
